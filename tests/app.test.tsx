@@ -24,9 +24,10 @@ const mocked = vi.mocked(api);
 const session = { access_token: "token" } as Awaited<ReturnType<typeof api.getSession>>;
 const middlemarch = { id: "b1", title: "Middlemarch", author: "George Eliot" };
 const beloved = { id: "b2", title: "Beloved", author: "Toni Morrison" };
-const entry = (word: string, title?: string) => ({
+const entry = (word: string, title?: string, sentence: string | null = null) => ({
   id: word,
   word,
+  sentence,
   created_at: "2026-11-02T10:00:00Z",
   book: title ? { title } : null,
 });
@@ -44,6 +45,76 @@ const savedQuote = (body: string, book: { title: string; author: string } | null
   body,
   created_at: "2026-11-02T10:00:00Z",
   book,
+});
+
+describe("book sentences", () => {
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+  });
+
+  it("saves the sentence, shows it on the word's page, then clears the box", async () => {
+    const line = "The sanction was granted.";
+    mocked.addWord.mockResolvedValue(entry("sanction", undefined, line));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "sanction");
+    await user.type(screen.getByLabelText("Sentence from the book (optional)"), `  ${line}  `);
+    await user.click(screen.getByRole("button", { name: "Save word" }));
+
+    expect(mocked.addWord).toHaveBeenCalledWith("sanction", null, line);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(screen.getByText(line)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Back to words" }));
+    expect(screen.getByLabelText("Sentence from the book (optional)")).toHaveValue("");
+  });
+
+  it("saves a word with Return and no sentence, with no extra steps", async () => {
+    mocked.addWord.mockResolvedValue(entry("ephemeral"));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "ephemeral{Enter}");
+
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null);
+    await user.click(await screen.findByRole("button", { name: "ephemeral" }));
+    expect(screen.getByText("No book sentence saved with this word.")).toBeVisible();
+  });
+
+  it("treats a sentence of only spaces as none", async () => {
+    mocked.addWord.mockResolvedValue(entry("ephemeral"));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "ephemeral");
+    await user.type(screen.getByLabelText("Sentence from the book (optional)"), "   ");
+    await user.click(screen.getByRole("button", { name: "Save word" }));
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null);
+  });
+
+  it("keeps the sentence when saving fails", async () => {
+    mocked.addWord.mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "ephemeral");
+    await user.type(screen.getByLabelText("Sentence from the book (optional)"), "A line");
+    await user.click(screen.getByRole("button", { name: "Save word" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The word wasn't saved");
+    expect(screen.getByLabelText("Sentence from the book (optional)")).toHaveValue("A line");
+  });
+
+  it("keeps half-typed text when opening a word and coming back", async () => {
+    mocked.listWords.mockResolvedValue([entry("sanction")]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await screen.findByLabelText("New word"), "halfway");
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(screen.queryByLabelText("New word")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Back to words" }));
+    expect(screen.getByLabelText("New word")).toHaveValue("halfway");
+  });
 });
 
 describe("saving quotes", () => {
@@ -171,7 +242,7 @@ describe("saving words", () => {
 
     await user.type(screen.getByLabelText("New word"), " Ephemeral. {Enter}");
 
-    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null);
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null);
     expect(await screen.findByRole("status")).toHaveTextContent("Saved ephemeral");
     expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("ephemeral");
     expect(screen.getByLabelText("New word")).toHaveValue("");
@@ -228,7 +299,7 @@ describe("the current book", () => {
     render(<App />);
     await screen.findByText(/by George Eliot/);
     await user.type(screen.getByLabelText("New word"), "ephemeral{Enter}");
-    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", "b1");
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", "b1", null);
     const row = (await screen.findAllByRole("listitem"))[0];
     expect(within(row).getByText("Middlemarch")).toBeInTheDocument();
   });
@@ -257,7 +328,7 @@ describe("the current book", () => {
     expect(mocked.setCurrentBook).toHaveBeenCalledWith("b2");
     await screen.findByText(/by Toni Morrison/);
     await user.type(screen.getByLabelText("New word"), "sanction{Enter}");
-    expect(mocked.addWord).toHaveBeenCalledWith("sanction", "b2");
+    expect(mocked.addWord).toHaveBeenCalledWith("sanction", "b2", null);
   });
 
   it("adds a book and makes it current", async () => {

@@ -30,6 +30,28 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/001_words.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/002_books.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/003_quotes.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/004_word_sentence.sql", "utf8"));
+});
+
+describe("book sentences", () => {
+  it("saves a sentence with a word, and keeps it optional", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word, sentence) values ('with', 'A line from the book.')");
+    await db.query("insert into public.words (word) values ('without')");
+    const { rows } = await db.query("select word, sentence from public.words order by word");
+    expect(rows).toEqual([
+      { word: "with", sentence: "A line from the book." },
+      { word: "without", sentence: null },
+    ]);
+  });
+
+  it("keeps a sentence private to its owner", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word, sentence) values ('private', 'Secret line')");
+    await as("authenticated", BOB);
+    const { rows } = await db.query("select sentence from public.words");
+    expect(rows).toEqual([]);
+  });
 });
 
 describe("quotes access rules", () => {

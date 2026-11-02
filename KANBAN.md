@@ -14,27 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F04: Save the book sentence with a word
-
-- **Depends on:** F02
-- **Requirements:** W2
-- **Story:** As the reader, I can add the sentence I found the word in, or skip it.
-- **Screen:** Optional sentence box, and sentence on the word's page
-- **Server:** Access rules cover the new field
-- **Data:** Sentence stored with the word
-
-**Test steps**
-
-- [ ] Save a word with a sentence.
-- [ ] Save another word and leave the sentence empty.
-- [ ] Open both words.
-
-**Passes if:** The sentence shows on the first word, and the second saves normally without one.
-
-**Effectiveness check:** Skipping the sentence adds no extra steps.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F05: See a dictionary definition for a saved word
 
 - **Depends on:** F01
@@ -361,6 +340,33 @@ None yet.
 
 ## Testing
 
+None yet.
+
+## Done
+
+### F04: Save the book sentence with a word
+
+- **Depends on:** F02
+- **Requirements:** W2
+- **Story:** As the reader, I can add the sentence I found the word in, or skip it.
+- **Screen:** Optional sentence box, and sentence on the word's page
+- **Server:** Access rules cover the new field
+- **Data:** Sentence stored with the word
+
+**Test steps**
+
+- [x] Save a word with a sentence.
+- [x] Save another word and leave the sentence empty.
+- [x] Open both words.
+
+**Passes if:** The sentence shows on the first word, and the second saves normally without one.
+
+**Effectiveness check:** Skipping the sentence adds no extra steps.
+
+**Build progress:** Live. All 52 automated tests pass, and the flow works in a browser against the fake local server. The sentence column exists on the real database and refuses signed-out reads.
+
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Passed, skipping the sentence adds no steps | Issues: None
+
 ### F03: Save a quote word for word
 
 - **Depends on:** F02
@@ -380,11 +386,9 @@ None yet.
 
 **Effectiveness check:** A short quote can be saved without losing your place in the book.
 
-**Build progress:** Live. All 45 automated tests pass, and a multi-line quote saved exactly in a browser against the fake local server. The real database refuses signed-out access to quotes. Waiting for the effectiveness result before moving to Done.
+**Build progress:** Live. All 45 automated tests pass, and a multi-line quote saved exactly in a browser against the fake local server. The real database refuses signed-out access to quotes.
 
-**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
-
-## Done
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Passed, saved a short quote without losing place | Issues: None
 
 ### F02: Set a current book, and new words attach to it
 

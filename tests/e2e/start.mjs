@@ -34,9 +34,9 @@ createServer((req, res) => {
     if (path === "/auth/v1/logout") return res.writeHead(204).end();
     if (path === "/rest/v1/words" && req.method === "GET") return json(200, words);
     if (path === "/rest/v1/words" && req.method === "POST") {
-      const { word: text, book_id } = JSON.parse(body);
+      const { word: text, book_id, sentence } = JSON.parse(body);
       const book = books.find((item) => item.id === book_id);
-      const word = { id: randomUUID(), word: text, created_at: new Date().toISOString(), book: book ? { title: book.title } : null };
+      const word = { id: randomUUID(), word: text, sentence, created_at: new Date().toISOString(), book: book ? { title: book.title } : null };
       words.unshift(word);
       return json(201, word);
     }

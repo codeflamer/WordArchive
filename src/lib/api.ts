@@ -1,11 +1,11 @@
 import { createClient, type Session } from "@supabase/supabase-js";
 
 export type Book = { id: string; title: string; author: string };
-export type SavedWord = { id: string; word: string; created_at: string; book: { title: string } | null };
+export type SavedWord = { id: string; word: string; sentence: string | null; created_at: string; book: { title: string } | null };
 
 export type SavedQuote = { id: string; body: string; created_at: string; book: { title: string; author: string } | null };
 
-const WORD_FIELDS = "id, word, created_at, book:books(title)";
+const WORD_FIELDS = "id, word, sentence, created_at, book:books(title)";
 const QUOTE_FIELDS = "id, body, created_at, book:books(title, author)";
 const BOOK_FIELDS = "id, title, author";
 
@@ -51,10 +51,10 @@ export async function listWords(): Promise<SavedWord[]> {
   return data as unknown as SavedWord[];
 }
 
-export async function addWord(word: string, bookId: string | null): Promise<SavedWord> {
+export async function addWord(word: string, bookId: string | null, sentence: string | null): Promise<SavedWord> {
   const { data, error } = await client()
     .from("words")
-    .insert({ word, book_id: bookId })
+    .insert({ word, book_id: bookId, sentence })
     .select(WORD_FIELDS)
     .single();
   if (error) throw error;
