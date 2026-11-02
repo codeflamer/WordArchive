@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Books } from "./Books";
-import { addWord, getCurrentBook, listWords, signOut, type Book, type SavedWord } from "./lib/api";
+import { addWord, listWords, type Book, type SavedWord } from "./lib/api";
 import { checkWord } from "./lib/word";
 
 const savedOn = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
 
-export function Words() {
+export function Words({ book }: { book: Book | null | undefined }) {
   const [words, setWords] = useState<SavedWord[] | null>(null);
-  const [book, setBook] = useState<Book | null | undefined>(undefined);
-  const [choosingBook, setChoosingBook] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -20,10 +17,6 @@ export function Words() {
     listWords().then(
       (list) => current && setWords(list),
       () => current && setError("Your words didn't load. Check your connection and reopen the app."),
-    );
-    getCurrentBook().then(
-      (found) => current && setBook(found),
-      () => current && setError("Your current book didn't load. Check your connection and reopen the app."),
     );
     return () => {
       current = false;
@@ -58,49 +51,11 @@ export function Words() {
     }
   }
 
-  async function leave() {
-    setError("");
-    try {
-      await signOut();
-    } catch {
-      setError("You weren't signed out. Check your connection and try again.");
-    }
-  }
-
-  if (choosingBook) {
-    return (
-      <Books
-        currentId={book?.id ?? null}
-        onChosen={(chosen) => {
-          setBook(chosen);
-          setChoosingBook(false);
-        }}
-        onBack={() => setChoosingBook(false)}
-      />
-    );
-  }
-
   return (
-    <main className="page">
+    <>
       {words && (
         <div className="ribbon" aria-label={`${words.length} ${words.length === 1 ? "word" : "words"} saved`}>
           {words.length}
-        </div>
-      )}
-      <h1 className="title">WordArchive</h1>
-
-      {book !== undefined && (
-        <div className="reading">
-          {book ? (
-            <p>
-              Reading <cite>{book.title}</cite> by {book.author}
-            </p>
-          ) : (
-            <p>No book chosen yet</p>
-          )}
-          <button type="button" className="quiet" onClick={() => setChoosingBook(true)}>
-            {book ? "Change book" : "Choose a book"}
-          </button>
         </div>
       )}
 
@@ -135,8 +90,6 @@ export function Words() {
           ))}
         </ol>
       )}
-
-      <button className="quiet leave" onClick={leave}>Sign out</button>
-    </main>
+    </>
   );
 }

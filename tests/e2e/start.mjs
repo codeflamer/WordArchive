@@ -5,6 +5,7 @@ import { createServer as createVite } from "vite";
 
 const words = [];
 const books = [];
+const quotes = [];
 let currentBookId = null;
 const base64url = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
 
@@ -38,6 +39,14 @@ createServer((req, res) => {
       const word = { id: randomUUID(), word: text, created_at: new Date().toISOString(), book: book ? { title: book.title } : null };
       words.unshift(word);
       return json(201, word);
+    }
+    if (path === "/rest/v1/quotes" && req.method === "GET") return json(200, quotes);
+    if (path === "/rest/v1/quotes" && req.method === "POST") {
+      const { body: text, book_id } = JSON.parse(body);
+      const book = books.find((item) => item.id === book_id);
+      const quote = { id: randomUUID(), body: text, created_at: new Date().toISOString(), book: book ? { title: book.title, author: book.author } : null };
+      quotes.unshift(quote);
+      return json(201, quote);
     }
     if (path === "/rest/v1/books" && req.method === "GET") return json(200, books);
     if (path === "/rest/v1/books" && req.method === "POST") {

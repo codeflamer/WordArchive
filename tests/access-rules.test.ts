@@ -29,6 +29,44 @@ beforeEach(async () => {
   `);
   await db.exec(readFileSync("supabase/migrations/001_words.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/002_books.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/003_quotes.sql", "utf8"));
+});
+
+describe("quotes access rules", () => {
+  it("stores a quote character for character", async () => {
+    const body = `  "It is," she said, 'a truth…'\n\n— and more.  `;
+    await as("authenticated", ALICE);
+    await db.query("insert into public.quotes (body) values ($1)", [body]);
+    const { rows } = await db.query<{ body: string }>("select body from public.quotes");
+    expect(rows[0].body).toBe(body);
+  });
+
+  it("hides a user's quotes from another user", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.quotes (body) values ('Private')");
+    await as("authenticated", BOB);
+    const { rows } = await db.query("select * from public.quotes");
+    expect(rows).toEqual([]);
+  });
+
+  it("blocks signed-out reads and saves", async () => {
+    await as("anon", null);
+    await expect(db.query("select * from public.quotes")).rejects.toThrow(/permission denied/);
+    await expect(db.query("insert into public.quotes (body) values ('x')")).rejects.toThrow(/permission denied/);
+  });
+
+  it("stops a user saving a quote as someone else, or against their book", async () => {
+    await as("authenticated", ALICE);
+    const { rows } = await db.query<{ id: string }>("insert into public.books (title, author) values ('A', 'B') returning id");
+    await as("authenticated", BOB);
+    await expect(db.query("insert into public.quotes (body, user_id) values ('forged', $1)", [ALICE])).rejects.toThrow(/row-level security/);
+    await expect(db.query("insert into public.quotes (body, book_id) values ('forged', $1)", [rows[0].id])).rejects.toThrow(/foreign key/);
+  });
+
+  it("rejects a blank quote", async () => {
+    await as("authenticated", ALICE);
+    await expect(db.query("insert into public.quotes (body) values ('  \n ')")).rejects.toThrow(/check constraint/);
+  });
 });
 
 async function addBookAs(uid: string, title: string) {

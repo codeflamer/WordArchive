@@ -207,8 +207,81 @@ time {
   overflow-wrap: anywhere;
 }
 
+[hidden] {
+  display: none !important;
+}
+
+.tabs {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tabs button {
+  min-height: 2.75rem;
+  margin-bottom: -1px;
+  padding: 0;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--faded);
+}
+
+.tabs button[aria-current] {
+  border-bottom-color: var(--ribbon);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.quote-field {
+  width: 100%;
+  padding: 0.5rem 0;
+  border: 0;
+  border-bottom: 2px solid var(--ink);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+textarea:focus {
+  outline: none;
+  border-bottom-color: var(--ribbon);
+}
+
+.quotes {
+  margin: 1.5rem 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.quotes li {
+  padding: 1rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.quotes li:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+
+.quotes blockquote {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.quotes .source {
+  margin: 0.5rem 0 0;
+}
+
 .reading {
-  margin: -1rem 0 1.75rem;
+  margin: -1rem 0 1.25rem;
 }
 
 .reading p {

@@ -16,6 +16,8 @@ vi.mock("../src/lib/api", () => ({
   addBook: vi.fn(),
   getCurrentBook: vi.fn(),
   setCurrentBook: vi.fn(),
+  listQuotes: vi.fn(),
+  addQuote: vi.fn(),
 }));
 
 const mocked = vi.mocked(api);
@@ -34,6 +36,89 @@ beforeEach(() => {
   mocked.onSessionChange.mockReturnValue(() => {});
   mocked.getCurrentBook.mockResolvedValue(null);
   mocked.listBooks.mockResolvedValue([]);
+  mocked.listQuotes.mockResolvedValue([]);
+});
+
+const savedQuote = (body: string, book: { title: string; author: string } | null = null) => ({
+  id: body,
+  body,
+  created_at: "2026-11-02T10:00:00Z",
+  book,
+});
+
+describe("saving quotes", () => {
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+  });
+
+  async function openQuotes(user: ReturnType<typeof userEvent.setup>) {
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Quotes" }));
+    return screen.findByLabelText("New quote");
+  }
+
+  it("saves a quote exactly as entered, against the current book", async () => {
+    const quote = `  "It is," she said,\n'a truth…'  `;
+    mocked.getCurrentBook.mockResolvedValue(middlemarch);
+    mocked.addQuote.mockResolvedValue(savedQuote(quote, middlemarch));
+    const user = userEvent.setup();
+    const box = await openQuotes(user);
+    await screen.findByText(/by George Eliot/);
+    box.focus();
+    await user.paste(quote);
+    await user.click(screen.getByRole("button", { name: "Save quote" }));
+
+    expect(mocked.addQuote).toHaveBeenCalledWith(quote, "b1");
+    expect(await screen.findByRole("status", { name: "" })).toBeInTheDocument();
+    const saved = document.querySelector(".quotes blockquote");
+    expect(saved?.textContent).toBe(quote);
+    expect(within(document.querySelector(".quotes li") as HTMLElement).getByText("Middlemarch")).toBeInTheDocument();
+    expect(box).toHaveValue("");
+    expect(screen.getByLabelText("1 quote saved")).toBeInTheDocument();
+  });
+
+  it("shows saved quotes after reopening", async () => {
+    mocked.listQuotes.mockResolvedValue([savedQuote("Old words", middlemarch)]);
+    const user = userEvent.setup();
+    await openQuotes(user);
+    expect(await screen.findByText("Old words")).toBeVisible();
+  });
+
+  it("rejects a blank quote without calling the server", async () => {
+    const user = userEvent.setup();
+    const box = await openQuotes(user);
+    await screen.findByText("No book chosen yet");
+    await user.type(box, "   ");
+    await user.click(screen.getByRole("button", { name: "Save quote" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Type or dictate a quote to save.");
+    expect(mocked.addQuote).not.toHaveBeenCalled();
+  });
+
+  it("keeps the typed quote when saving fails", async () => {
+    mocked.addQuote.mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    const box = await openQuotes(user);
+    await screen.findByText("No book chosen yet");
+    await user.type(box, "A line");
+    await user.click(screen.getByRole("button", { name: "Save quote" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The quote wasn't saved");
+    expect(box).toHaveValue("A line");
+  });
+
+  it("keeps a half-typed quote when switching tabs or books", async () => {
+    mocked.listBooks.mockResolvedValue([middlemarch]);
+    const user = userEvent.setup();
+    const box = await openQuotes(user);
+    await screen.findByText("No book chosen yet");
+    await user.type(box, "Half a quote");
+    await user.click(screen.getByRole("button", { name: "Words" }));
+    await user.click(screen.getByRole("button", { name: "Choose a book" }));
+    await user.click(await screen.findByRole("button", { name: /Middlemarch/ }));
+    await screen.findByText(/by George Eliot/);
+    await user.click(screen.getByRole("button", { name: "Quotes" }));
+    expect(screen.getByLabelText("New quote")).toHaveValue("Half a quote");
+  });
 });
 
 describe("signing in", () => {
@@ -152,10 +237,10 @@ describe("the current book", () => {
     mocked.getCurrentBook.mockRejectedValue(new Error("offline"));
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByRole("alert");
+    await screen.findByText(/Your current book didn't load/);
     await user.type(screen.getByLabelText("New word"), "ephemeral{Enter}");
     expect(mocked.addWord).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent("current book hasn't loaded");
+    expect(screen.getByText(/current book hasn't loaded/)).toBeInTheDocument();
     expect(screen.getByLabelText("New word")).toHaveValue("ephemeral");
   });
 

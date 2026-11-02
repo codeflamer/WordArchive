@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSession, isConfigured, onSessionChange } from "./lib/api";
+import { Home } from "./Home";
 import { SignIn } from "./SignIn";
-import { Words } from "./Words";
 
 export function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -22,5 +22,5 @@ export function App() {
     );
   }
   if (session === undefined) return <main className="page" aria-busy="true" />;
-  return session ? <Words /> : <SignIn />;
+  return session ? <Home /> : <SignIn />;
 }

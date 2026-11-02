@@ -14,27 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F03: Save a quote word for word
-
-- **Depends on:** F02
-- **Requirements:** Q1, Q2, B3
-- **Story:** As the reader, I type or dictate a quote and it is saved exactly as entered, against my current book.
-- **Screen:** Add quote form and quote list
-- **Server:** Access rules keep quotes private to the user
-- **Data:** Quotes table, linked to a book
-
-**Test steps**
-
-- [ ] Type a quote with commas, quotation marks and a line break.
-- [ ] Dictate a second quote with the iPhone keyboard mic.
-- [ ] Reopen the app and compare both with what you entered.
-
-**Passes if:** Both quotes match what was entered, character for character, and show the current book.
-
-**Effectiveness check:** A short quote can be saved without losing your place in the book.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F04: Save the book sentence with a word
 
 - **Depends on:** F02
@@ -382,7 +361,28 @@ None yet.
 
 ## Testing
 
-None yet.
+### F03: Save a quote word for word
+
+- **Depends on:** F02
+- **Requirements:** Q1, Q2, B3
+- **Story:** As the reader, I type or dictate a quote and it is saved exactly as entered, against my current book.
+- **Screen:** Add quote form and quote list
+- **Server:** Access rules keep quotes private to the user
+- **Data:** Quotes table, linked to a book
+
+**Test steps**
+
+- [x] Type a quote with commas, quotation marks and a line break.
+- [x] Dictate a second quote with the iPhone keyboard mic.
+- [x] Reopen the app and compare both with what you entered.
+
+**Passes if:** Both quotes match what was entered, character for character, and show the current book.
+
+**Effectiveness check:** A short quote can be saved without losing your place in the book.
+
+**Build progress:** Live. All 45 automated tests pass, and a multi-line quote saved exactly in a browser against the fake local server. The real database refuses signed-out access to quotes. Waiting for the effectiveness result before moving to Done.
+
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
 
 ## Done
 

@@ -3,7 +3,10 @@ import { createClient, type Session } from "@supabase/supabase-js";
 export type Book = { id: string; title: string; author: string };
 export type SavedWord = { id: string; word: string; created_at: string; book: { title: string } | null };
 
+export type SavedQuote = { id: string; body: string; created_at: string; book: { title: string; author: string } | null };
+
 const WORD_FIELDS = "id, word, created_at, book:books(title)";
+const QUOTE_FIELDS = "id, body, created_at, book:books(title, author)";
 const BOOK_FIELDS = "id, title, author";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -56,6 +59,25 @@ export async function addWord(word: string, bookId: string | null): Promise<Save
     .single();
   if (error) throw error;
   return data as unknown as SavedWord;
+}
+
+export async function listQuotes(): Promise<SavedQuote[]> {
+  const { data, error } = await client()
+    .from("quotes")
+    .select(QUOTE_FIELDS)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as unknown as SavedQuote[];
+}
+
+export async function addQuote(body: string, bookId: string | null): Promise<SavedQuote> {
+  const { data, error } = await client()
+    .from("quotes")
+    .insert({ body, book_id: bookId })
+    .select(QUOTE_FIELDS)
+    .single();
+  if (error) throw error;
+  return data as unknown as SavedQuote;
 }
 
 export async function listBooks(): Promise<Book[]> {
