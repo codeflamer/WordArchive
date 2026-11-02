@@ -219,7 +219,7 @@ async function askDictionaries(
   const backup = wiktionaryAnswer(await wiktionary(), word);
   if (backup !== "unavailable" && backup.status === "found") return backup;
   return main === "unavailable" || backup === "unavailable" ? "unavailable" : { status: "not_found" };
-}
+} 
 
 // Returns "unavailable" only when no service could answer, so a real word is never reported as missing.
 export async function lookUp(

@@ -6,11 +6,44 @@ import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 type WordPageProps = {
   word: SavedWord;
   lookupFailed: boolean;
+  aiFailed: boolean;
   onRetry: () => void;
   onChoose: (suggestion: string) => void;
   onKeep: () => void;
   onBack: () => void;
 };
+
+function AiHelp({ word, aiFailed }: { word: SavedWord; aiFailed: boolean }) {
+  const content = word.ai_content;
+  if (!content) {
+    return aiFailed ? (
+      <p className="empty">AI examples aren't available right now.</p>
+    ) : (
+      <p className="empty" role="status">Writing examples…</p>
+    );
+  }
+  return (
+    <section className="ai-help" aria-label="Written by AI">
+      <p className="ai-label">Written by AI, so check it against the definitions</p>
+      {content.chosenMeaning && (
+        <div>
+          <h3 className="ai-heading">In your sentence, it means</h3>
+          <p className="ai-meaning">
+            <em>{content.chosenMeaning.partOfSpeech}.</em> {content.chosenMeaning.definition}
+          </p>
+        </div>
+      )}
+      <div>
+        <h3 className="ai-heading">3 examples</h3>
+        <ol>
+          {content.examples.map((example, index) => (
+            <li key={index}>{example}</li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
 
 function MeaningList({ meanings }: { meanings: Meaning[] }) {
   return (
@@ -32,7 +65,7 @@ function MeaningList({ meanings }: { meanings: Meaning[] }) {
   );
 }
 
-function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<WordPageProps, "onBack">) {
+function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<WordPageProps, "onBack" | "aiFailed">) {
   if (word.definition_status === "found" && word.definitions) {
     const { meanings, typedMeanings, source, sourceUrl } = word.definitions;
     return (
@@ -69,7 +102,7 @@ function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<Wor
   return <p className="empty" role="status">Looking up this word…</p>;
 }
 
-export function WordPage({ word, lookupFailed, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
+export function WordPage({ word, lookupFailed, aiFailed, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
   return (
     <article className="word-page">
       <button type="button" className="quiet" onClick={onBack}>Back to words</button>
@@ -88,6 +121,7 @@ export function WordPage({ word, lookupFailed, onRetry, onChoose, onKeep, onBack
       ) : (
         <p className="empty">No book sentence saved with this word.</p>
       )}
+      {word.definition_status === "found" && <AiHelp word={word} aiFailed={aiFailed} />}
       <Definitions word={word} lookupFailed={lookupFailed} onRetry={onRetry} onChoose={onChoose} onKeep={onKeep} />
     </article>
   );

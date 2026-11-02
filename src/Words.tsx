@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { addWord, defineWord, keepAsTyped, listWords, saveDefinitions, type Book, type SavedWord } from "./lib/api";
+import {
+  addWord,
+  defineWord,
+  explainWord,
+  keepAsTyped,
+  listWords,
+  saveAiContent,
+  saveDefinitions,
+  type Book,
+  type SavedWord,
+} from "./lib/api";
 import { cacheWords, readCachedWords } from "./lib/cache";
 import { savedOn } from "./lib/dates";
 import { checkWord } from "./lib/word";
@@ -10,6 +20,8 @@ export function Words({ book }: { book: Book | null | undefined }) {
   const [words, setWords] = useState<SavedWord[] | null>(readCachedWords);
   const [openId, setOpenId] = useState<string | null>(null);
   const [failedLookups, setFailedLookups] = useState<ReadonlySet<string>>(new Set());
+  const [aiTried, setAiTried] = useState<ReadonlySet<string>>(new Set());
+  const [aiFailed, setAiFailed] = useState<ReadonlySet<string>>(new Set());
   const [draft, setDraft] = useState("");
   const [sentence, setSentence] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18,6 +30,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
   const [saved, setSaved] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const lookingUp = useRef(new Set<string>());
+  const explaining = useRef(new Set<string>());
 
   const openWord = words?.find((entry) => entry.id === openId);
 
@@ -41,6 +54,22 @@ export function Words({ book }: { book: Book | null | undefined }) {
   useEffect(() => {
     if (words) cacheWords(words);
   }, [words]);
+
+  // Runs after the definitions are saved, so an AI failure can't affect them.
+  const explain = useCallback(async (entry: SavedWord) => {
+    if (explaining.current.has(entry.id) || !entry.definitions) return;
+    explaining.current.add(entry.id);
+    setAiTried((tried) => new Set(tried).add(entry.id));
+    try {
+      const content = await explainWord(entry.base_form ?? entry.word, entry.sentence, entry.definitions);
+      await saveAiContent(entry.id, content);
+      setWords((list) => (list ?? []).map((item) => (item.id === entry.id ? { ...item, ai_content: content } : item)));
+    } catch {
+      setAiFailed((failed) => new Set(failed).add(entry.id));
+    } finally {
+      explaining.current.delete(entry.id);
+    }
+  }, []);
 
   // A chosen spelling is stored like a base form, so "ephemeral" shows with "You typed ephemral".
   const lookUp = useCallback(async (entry: SavedWord, chosenSpelling?: string) => {
@@ -66,12 +95,13 @@ export function Words({ book }: { book: Book | null | undefined }) {
             : item,
         ),
       );
+      if (result.status === "found") void explain({ ...entry, definitions, base_form: baseForm });
     } catch {
       setFailedLookups((failed) => new Set(failed).add(entry.id));
     } finally {
       lookingUp.current.delete(entry.id);
     }
-  }, []);
+  }, [explain]);
 
   const keep = useCallback(async (entry: SavedWord) => {
     setFailedLookups((failed) => {
@@ -96,6 +126,13 @@ export function Words({ book }: { book: Book | null | undefined }) {
   useEffect(() => {
     if (needsLookup && openWord) void lookUp(openWord);
   }, [needsLookup, openWord, lookUp]);
+
+  // Words defined before AI existed get their examples when opened, once per visit.
+  const needsAi =
+    openWord !== undefined && openWord.definition_status === "found" && !openWord.ai_content && !aiTried.has(openWord.id);
+  useEffect(() => {
+    if (needsAi && openWord) void explain(openWord);
+  }, [needsAi, openWord, explain]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -139,6 +176,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
         <WordPage
           word={openWord}
           lookupFailed={failedLookups.has(openWord.id)}
+          aiFailed={aiFailed.has(openWord.id)}
           onRetry={() => void lookUp(openWord)}
           onChoose={(suggestion) => void lookUp(openWord, suggestion)}
           onKeep={() => void keep(openWord)}

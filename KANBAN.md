@@ -14,32 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F08: Get the right meaning and 3 examples from AI
-
-- **Depends on:** F04, F05
-- **Requirements:** M2, M3, M4
-- **Story:** As the reader, I add a book sentence, and AI highlights the meaning that fits and writes 3 examples, labelled as AI-written.
-- **Screen:** Highlighted meaning, 3 examples and an AI label
-- **Server:** Cloudflare calls Groq and holds the key
-- **Data:** Chosen meaning and examples stored with the word
-
-**Before starting**
-
-- [ ] Confirm Groq's free plan limits and data terms on its official pages.
-
-**Test steps**
-
-- [ ] Save "sanction" with a sentence where it means to approve.
-- [ ] Save "sanction" on a test account with a sentence where it means to punish.
-- [ ] Check the highlighted meaning and examples for each.
-- [ ] Claude confirms the AI key can't be found in the app's code on the phone.
-
-**Passes if:** Each sentence gets the right meaning, exactly 3 examples and an AI label, and the key isn't exposed.
-
-**Effectiveness check:** Try 20 real word and sentence pairs. Record how many meanings you judge correct.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F09: Fall back to the dictionary when AI is unavailable
 
 - **Depends on:** F08
@@ -273,7 +247,33 @@ None yet.
 
 ## Testing
 
-None yet.
+### F08: Get the right meaning and 3 examples from AI
+
+- **Depends on:** F04, F05
+- **Requirements:** M2, M3, M4
+- **Story:** As the reader, I add a book sentence, and AI highlights the meaning that fits and writes 3 examples, labelled as AI-written.
+- **Screen:** Highlighted meaning, 3 examples and an AI label
+- **Server:** Cloudflare calls Groq and holds the key
+- **Data:** Chosen meaning and examples stored with the word
+
+**Before starting**
+
+- [ ] Confirm Groq's free plan limits and data terms on its official pages. Data terms checked 2026-11-02: inputs aren't used for training, and Zero Data Retention can be turned on. The free limits for the chosen model still need reading from the signed-in console.
+
+**Test steps**
+
+- [x] Save "sanction" with a sentence where it means to approve.
+- [x] Save "sanction" again with a sentence where it means to punish. New sign-ups are off, so this uses your own account instead of a test account.
+- [x] Check the highlighted meaning and examples for each.
+- [x] Claude confirms the AI key can't be found in the app's code on the phone. Scanned the live site on 2026-11-02.
+
+**Passes if:** Each sentence gets the right meaning, exactly 3 examples and an AI label, and the key isn't exposed.
+
+**Effectiveness check:** Try 20 real word and sentence pairs. Record how many meanings you judge correct.
+
+**Build progress:** Live, with all 166 automated tests passing. The Groq key is stored in Cloudflare and isn't in the published files. The AI endpoint refuses signed-out requests and fake sign-ins. Real Groq worked in the iPhone test. Waiting for the effectiveness result before moving to Done.
+
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
 
 ## Done
 

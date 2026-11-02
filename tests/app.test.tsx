@@ -21,6 +21,8 @@ vi.mock("../src/lib/api", () => ({
   defineWord: vi.fn(),
   saveDefinitions: vi.fn(),
   keepAsTyped: vi.fn(),
+  explainWord: vi.fn(),
+  saveAiContent: vi.fn(),
   isOfflineError: vi.fn(),
 }));
 
@@ -43,6 +45,8 @@ const definitions = {
   meanings: [{ partOfSpeech: "noun", definitions: [{ definition: "An approval.", example: "With sanction." }] }],
 };
 
+const aiContent = { chosenMeaning: null, examples: ["First AI line.", "Second AI line.", "Third AI line."] };
+
 beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
@@ -50,6 +54,8 @@ beforeEach(() => {
   mocked.isOfflineError.mockReturnValue(false);
   mocked.defineWord.mockResolvedValue({ status: "not_found" });
   mocked.saveDefinitions.mockResolvedValue();
+  mocked.explainWord.mockResolvedValue(aiContent);
+  mocked.saveAiContent.mockResolvedValue();
   mocked.getCurrentBook.mockResolvedValue(null);
   mocked.listBooks.mockResolvedValue([]);
   mocked.listQuotes.mockResolvedValue([]);
@@ -172,6 +178,111 @@ describe("definitions", () => {
     await saveWord(user, "sanction");
     await user.click(await screen.findByRole("button", { name: "sanction" }));
     expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
+  });
+});
+
+describe("AI meaning and examples", () => {
+  const chosen = { chosenMeaning: { partOfSpeech: "noun", definition: "A penalty." }, examples: aiContent.examples };
+
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+  });
+
+  async function saveAndOpen(user: ReturnType<typeof userEvent.setup>, sentence: string) {
+    mocked.addWord.mockResolvedValue(entry("sanction", undefined, sentence));
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "sanction");
+    await user.type(screen.getByLabelText("Sentence from the book (optional)"), sentence);
+    await user.click(screen.getByRole("button", { name: "Save word" }));
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+  }
+
+  it("asks AI after the definitions are saved, using the book sentence", async () => {
+    const order: string[] = [];
+    mocked.saveDefinitions.mockImplementation(async () => void order.push("definitions"));
+    mocked.explainWord.mockImplementation(async () => {
+      order.push("ai");
+      return chosen;
+    });
+    const user = userEvent.setup();
+    await saveAndOpen(user, "The sanction hurt.");
+
+    await waitFor(() => expect(mocked.saveAiContent).toHaveBeenCalledWith("sanction", chosen));
+    expect(order).toEqual(["definitions", "ai"]);
+    expect(mocked.explainWord).toHaveBeenCalledWith("sanction", "The sanction hurt.", definitions);
+    expect(mocked.explainWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the chosen meaning and exactly 3 examples, labelled as AI", async () => {
+    mocked.explainWord.mockResolvedValue(chosen);
+    const user = userEvent.setup();
+    await saveAndOpen(user, "The sanction hurt.");
+
+    const help = await screen.findByRole("region", { name: "Written by AI" });
+    expect(within(help).getByText(/Written by AI/)).toBeVisible();
+    expect(within(help).getByText("In your sentence, it means")).toBeVisible();
+    expect(within(help).getByText(/A penalty\./)).toBeVisible();
+    expect(within(help).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("leaves out the chosen meaning when AI didn't choose one", async () => {
+    const user = userEvent.setup();
+    await saveAndOpen(user, "A line.");
+    const help = await screen.findByRole("region", { name: "Written by AI" });
+    expect(within(help).queryByText("In your sentence, it means")).not.toBeInTheDocument();
+    expect(within(help).getByText("First AI line.")).toBeVisible();
+  });
+
+  it("uses the base form when asking AI", async () => {
+    mocked.addWord.mockResolvedValue(entry("bored"));
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions, baseForm: "bore" });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "bored{Enter}");
+    await waitFor(() => expect(mocked.explainWord).toHaveBeenCalledWith("bore", null, definitions));
+  });
+
+  it("keeps the definitions when AI fails, and doesn't keep retrying", async () => {
+    mocked.explainWord.mockRejectedValue(new Error("unavailable"));
+    const user = userEvent.setup();
+    await saveAndOpen(user, "A line.");
+    expect(await screen.findByText("AI examples aren't available right now.")).toBeVisible();
+    expect(screen.getByText("An approval.")).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mocked.explainWord).toHaveBeenCalledTimes(1);
+    expect(mocked.saveAiContent).not.toHaveBeenCalled();
+  });
+
+  it("fills in an older word when it's opened, without a new dictionary lookup", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("older"), definitions, definition_status: "found" }]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "older" }));
+    expect(await screen.findByText("First AI line.")).toBeVisible();
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+  });
+
+  it("doesn't ask AI again for a word that already has its content", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("done"), definitions, definition_status: "found", ai_content: aiContent }]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "done" }));
+    expect(screen.getByText("First AI line.")).toBeVisible();
+    expect(mocked.explainWord).not.toHaveBeenCalled();
+  });
+
+  it("doesn't ask AI about a word that wasn't found", async () => {
+    mocked.addWord.mockResolvedValue(entry("zzzznotaword"));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "zzzznotaword{Enter}");
+    await screen.findByText("Check this word");
+    expect(mocked.explainWord).not.toHaveBeenCalled();
   });
 });
 

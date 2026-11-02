@@ -33,6 +33,14 @@ createServer((req, res) => {
     const path = new URL(req.url, "http://localhost").pathname;
     if (path === "/auth/v1/token") return json(200, session());
     if (path === "/auth/v1/logout") return res.writeHead(204).end();
+    if (path === "/api/explain") {
+      const { word, sentence } = JSON.parse(body);
+      if (sentence?.includes("failai")) return json(503, { error: "unavailable" });
+      return json(200, {
+        chosenMeaning: sentence ? { partOfSpeech: "noun", definition: "A penalty or punishment." } : null,
+        examples: [`The first example uses ${word} well.`, `A second sentence with ${word} in it.`, `Here is ${word} a third time.`],
+      });
+    }
     if (path === "/api/define") {
       const word = new URL(req.url, "http://localhost").searchParams.get("word");
       if (word === "zzzznotaword") return json(200, { status: "not_found", suggestions: [] });

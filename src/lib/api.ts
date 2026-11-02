@@ -1,5 +1,5 @@
 import { createClient, isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
-import type { Definitions, LookupResult } from "./definitions";
+import type { AiContent, Definitions, LookupResult } from "./definitions";
 
 export type Book = { id: string; title: string; author: string };
 export type DefinitionStatus = "found" | "not_found";
@@ -14,12 +14,13 @@ export type SavedWord = {
   definition_status: DefinitionStatus | null;
   spelling_suggestions?: string[] | null;
   kept_as_typed?: boolean;
+  ai_content?: AiContent | null;
 };
 
 export type SavedQuote = { id: string; body: string; created_at: string; book: { title: string; author: string } | null };
 
 const WORD_FIELDS =
-  "id, word, base_form, sentence, created_at, definitions, definition_status, spelling_suggestions, kept_as_typed, book:books(title)";
+  "id, word, base_form, sentence, created_at, definitions, definition_status, spelling_suggestions, kept_as_typed, ai_content, book:books(title)";
 const QUOTE_FIELDS = "id, body, created_at, book:books(title, author)";
 const BOOK_FIELDS = "id, title, author";
 
@@ -104,6 +105,23 @@ export async function saveDefinitions(
     .from("words")
     .update({ definition_status: status, definitions, base_form: baseForm, spelling_suggestions: suggestions })
     .eq("id", wordId);
+  if (error) throw error;
+}
+
+export async function explainWord(word: string, sentence: string | null, definitions: Definitions): Promise<AiContent> {
+  const session = await getSession();
+  if (!session) throw new Error("Not signed in");
+  const response = await fetch("/api/explain", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ word, sentence, definitions }),
+  });
+  if (!response.ok) throw new Error(`Explain failed: ${response.status}`);
+  return (await response.json()) as AiContent;
+}
+
+export async function saveAiContent(wordId: string, content: AiContent): Promise<void> {
+  const { error } = await client().from("words").update({ ai_content: content }).eq("id", wordId);
   if (error) throw error;
 }
 

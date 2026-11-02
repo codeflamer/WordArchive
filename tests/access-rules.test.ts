@@ -34,6 +34,28 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/005_word_definitions.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/006_word_base_form.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/007_word_spelling.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/008_word_ai_content.sql", "utf8"));
+});
+
+describe("AI content", () => {
+  const content = JSON.stringify({ chosenMeaning: null, examples: ["One.", "Two.", "Three."] });
+
+  it("stores AI content on a user's own word", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    await db.query("update public.words set ai_content = $1::jsonb", [content]);
+    const { rows } = await db.query<{ ai_content: { examples: string[] } }>("select ai_content from public.words");
+    expect(rows[0].ai_content.examples).toHaveLength(3);
+  });
+
+  it("doesn't change another user's word, and blocks signed-out changes", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    await as("authenticated", BOB);
+    expect((await db.query("update public.words set ai_content = $1::jsonb", [content])).affectedRows).toBe(0);
+    await as("anon", null);
+    await expect(db.query("update public.words set ai_content = $1::jsonb", [content])).rejects.toThrow(/permission denied/);
+  });
 });
 
 describe("spelling", () => {
