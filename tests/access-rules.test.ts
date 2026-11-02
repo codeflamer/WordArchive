@@ -33,6 +33,32 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/004_word_sentence.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/005_word_definitions.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/006_word_base_form.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/007_word_spelling.sql", "utf8"));
+});
+
+describe("spelling", () => {
+  it("stores suggestions and the keep choice on a user's own word", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('ephemral')");
+    const before = await db.query("select spelling_suggestions, kept_as_typed from public.words");
+    expect(before.rows).toEqual([{ spelling_suggestions: null, kept_as_typed: false }]);
+    await db.query("update public.words set spelling_suggestions = $1, kept_as_typed = true", [["ephemeral"]]);
+    const { rows } = await db.query("select spelling_suggestions, kept_as_typed from public.words");
+    expect(rows).toEqual([{ spelling_suggestions: ["ephemeral"], kept_as_typed: true }]);
+  });
+
+  it("doesn't change another user's word", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('ephemral')");
+    await as("authenticated", BOB);
+    const result = await db.query("update public.words set kept_as_typed = true");
+    expect(result.affectedRows).toBe(0);
+  });
+
+  it("blocks signed-out changes", async () => {
+    await as("anon", null);
+    await expect(db.query("update public.words set kept_as_typed = true")).rejects.toThrow(/permission denied/);
+  });
 });
 
 describe("base forms", () => {

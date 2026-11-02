@@ -14,27 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F07: Handle typos and unknown words
-
-- **Depends on:** F05
-- **Requirements:** W3, W5
-- **Story:** As the reader, I get spelling suggestions for a typo, and a word the dictionary lacks still saves.
-- **Screen:** "Did you mean" suggestions and a "check this word" flag
-- **Server:** Cloudflare returns suggestions when lookup finds nothing
-- **Data:** Flag for unchecked words
-
-**Test steps**
-
-- [ ] Save "ephemral" and choose the suggested spelling.
-- [ ] Save a made-up word and choose to keep it.
-- [ ] Open your word list.
-
-**Passes if:** The corrected word gets a definition, and the made-up word is saved with a visible flag.
-
-**Effectiveness check:** Fixing a typo takes one tap.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F08: Get the right meaning and 3 examples from AI
 
 - **Depends on:** F04, F05
@@ -294,6 +273,33 @@ None yet.
 
 ## Testing
 
+None yet.
+
+## Done
+
+### F07: Handle typos and unknown words
+
+- **Depends on:** F05
+- **Requirements:** W3, W5
+- **Story:** As the reader, I get spelling suggestions for a typo, and a word the dictionary lacks still saves.
+- **Screen:** "Did you mean" suggestions and a "check this word" flag
+- **Server:** Cloudflare returns suggestions when lookup finds nothing
+- **Data:** Flag for unchecked words
+
+**Test steps**
+
+- [x] Save "ephemral" and choose the suggested spelling.
+- [x] Save a made-up word and choose to keep it.
+- [x] Open your word list.
+
+**Passes if:** The corrected word gets a definition, and the made-up word is saved with a visible flag.
+
+**Effectiveness check:** Fixing a typo takes one tap.
+
+**Build progress:** Built, with all 130 automated tests passing. Real lookups put the right word first for every genuine typo tried, and common misspellings like "recieve" correct themselves. The flow works in a browser against the fake local server. Live, and the new columns on the real database refuse signed-out access.
+
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Passed, a typo is fixed in one tap | Issues: None
+
 ### F06: Save a word under its base form
 
 - **Depends on:** F05
@@ -312,11 +318,9 @@ None yet.
 
 **Effectiveness check:** Try 10 changed word forms from your own books. Record how many are correct.
 
-**Build progress:** Built, with all 108 automated tests passing. Detection gave the expected result on 22 of 23 real Wiktionary entries, with "ran" staying as typed. The flow works in a browser against the fake local server. Live, and the column on the real database refuses signed-out access. Waiting for the effectiveness result before moving to Done.
+**Build progress:** Built, with all 108 automated tests passing. Detection gave the expected result on 22 of 23 real Wiktionary entries, with "ran" staying as typed. The flow works in a browser against the fake local server. Live, and the column on the real database refuses signed-out access.
 
-**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: ISS-010, ISS-011
-
-## Done
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Passed, 10 of 10 changed words correct | Issues: ISS-010, ISS-011
 
 ### F05: See a dictionary definition for a saved word
 

@@ -8,4 +8,6 @@ export type Definitions = {
   typedMeanings?: Meaning[];
 };
 
-export type LookupResult = { status: "found"; definitions: Definitions; baseForm?: string } | { status: "not_found" };
+export type LookupResult =
+  | { status: "found"; definitions: Definitions; baseForm?: string }
+  | { status: "not_found"; suggestions?: string[] };

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { addWord, defineWord, listWords, saveDefinitions, type Book, type SavedWord } from "./lib/api";
+import { addWord, defineWord, keepAsTyped, listWords, saveDefinitions, type Book, type SavedWord } from "./lib/api";
 import { cacheWords, readCachedWords } from "./lib/cache";
 import { savedOn } from "./lib/dates";
 import { checkWord } from "./lib/word";
+import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 import { WordPage } from "./WordPage";
 
 export function Words({ book }: { book: Book | null | undefined }) {
@@ -41,7 +42,8 @@ export function Words({ book }: { book: Book | null | undefined }) {
     if (words) cacheWords(words);
   }, [words]);
 
-  const lookUp = useCallback(async (entry: SavedWord) => {
+  // A chosen spelling is stored like a base form, so "ephemeral" shows with "You typed ephemral".
+  const lookUp = useCallback(async (entry: SavedWord, chosenSpelling?: string) => {
     if (lookingUp.current.has(entry.id)) return;
     lookingUp.current.add(entry.id);
     setFailedLookups((failed) => {
@@ -50,13 +52,18 @@ export function Words({ book }: { book: Book | null | undefined }) {
       return next;
     });
     try {
-      const result = await defineWord(entry.word);
+      const result = await defineWord(chosenSpelling ?? entry.word);
+      // A chosen spelling the dictionaries can't define leaves the word as it was, with its suggestions.
+      if (chosenSpelling && result.status !== "found") throw new Error("No definition for the chosen spelling");
       const definitions = result.status === "found" ? result.definitions : null;
-      const baseForm = (result.status === "found" && result.baseForm) || null;
-      await saveDefinitions(entry.id, result.status, definitions, baseForm);
+      const baseForm = (result.status === "found" && result.baseForm) || chosenSpelling || null;
+      const suggestions = result.status === "not_found" ? (result.suggestions ?? []) : null;
+      await saveDefinitions(entry.id, result.status, definitions, baseForm, suggestions);
       setWords((list) =>
         (list ?? []).map((item) =>
-          item.id === entry.id ? { ...item, definitions, definition_status: result.status, base_form: baseForm } : item,
+          item.id === entry.id
+            ? { ...item, definitions, definition_status: result.status, base_form: baseForm, spelling_suggestions: suggestions }
+            : item,
         ),
       );
     } catch {
@@ -66,8 +73,26 @@ export function Words({ book }: { book: Book | null | undefined }) {
     }
   }, []);
 
-  // Words saved before lookups existed, or while a lookup failed, fill in when opened.
-  const needsLookup = openWord !== undefined && openWord.definition_status === null && !failedLookups.has(openWord.id);
+  const keep = useCallback(async (entry: SavedWord) => {
+    setFailedLookups((failed) => {
+      const next = new Set(failed);
+      next.delete(entry.id);
+      return next;
+    });
+    try {
+      await keepAsTyped(entry.id);
+      setWords((list) => (list ?? []).map((item) => (item.id === entry.id ? { ...item, kept_as_typed: true } : item)));
+    } catch {
+      setFailedLookups((failed) => new Set(failed).add(entry.id));
+    }
+  }, []);
+
+  // Words saved before lookups or suggestions existed, or while a lookup failed, fill in when opened.
+  const needsLookup =
+    openWord !== undefined &&
+    !failedLookups.has(openWord.id) &&
+    (openWord.definition_status === null ||
+      (openWord.definition_status === "not_found" && !openWord.kept_as_typed && openWord.spelling_suggestions == null));
   useEffect(() => {
     if (needsLookup && openWord) void lookUp(openWord);
   }, [needsLookup, openWord, lookUp]);
@@ -115,6 +140,8 @@ export function Words({ book }: { book: Book | null | undefined }) {
           word={openWord}
           lookupFailed={failedLookups.has(openWord.id)}
           onRetry={() => void lookUp(openWord)}
+          onChoose={(suggestion) => void lookUp(openWord, suggestion)}
+          onKeep={() => void keep(openWord)}
           onBack={() => setOpenId(null)}
         />
       )}
@@ -161,7 +188,18 @@ export function Words({ book }: { book: Book | null | undefined }) {
                 </button>
                 <time dateTime={entry.created_at}>{savedOn.format(new Date(entry.created_at))}</time>
                 {entry.base_form && <span className="source">You typed {entry.word}</span>}
+                {entry.definition_status === "not_found" && (
+                  <span className="word-flag">{entry.kept_as_typed ? "Not in the dictionary" : "Check this word"}</span>
+                )}
                 {entry.book && <cite className="source">{entry.book.title}</cite>}
+                {needsSpellingCheck(entry) && (
+                  <SpellingCheck
+                    word={entry}
+                    failed={failedLookups.has(entry.id)}
+                    onChoose={(suggestion) => void lookUp(entry, suggestion)}
+                    onKeep={() => void keep(entry)}
+                  />
+                )}
               </li>
             ))}
           </ol>

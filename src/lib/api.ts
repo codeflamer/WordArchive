@@ -12,11 +12,14 @@ export type SavedWord = {
   book: { title: string } | null;
   definitions: Definitions | null;
   definition_status: DefinitionStatus | null;
+  spelling_suggestions?: string[] | null;
+  kept_as_typed?: boolean;
 };
 
 export type SavedQuote = { id: string; body: string; created_at: string; book: { title: string; author: string } | null };
 
-const WORD_FIELDS = "id, word, base_form, sentence, created_at, definitions, definition_status, book:books(title)";
+const WORD_FIELDS =
+  "id, word, base_form, sentence, created_at, definitions, definition_status, spelling_suggestions, kept_as_typed, book:books(title)";
 const QUOTE_FIELDS = "id, body, created_at, book:books(title, author)";
 const BOOK_FIELDS = "id, title, author";
 
@@ -95,11 +98,17 @@ export async function saveDefinitions(
   status: DefinitionStatus,
   definitions: Definitions | null,
   baseForm: string | null,
+  suggestions: string[] | null,
 ): Promise<void> {
   const { error } = await client()
     .from("words")
-    .update({ definition_status: status, definitions, base_form: baseForm })
+    .update({ definition_status: status, definitions, base_form: baseForm, spelling_suggestions: suggestions })
     .eq("id", wordId);
+  if (error) throw error;
+}
+
+export async function keepAsTyped(wordId: string): Promise<void> {
+  const { error } = await client().from("words").update({ kept_as_typed: true }).eq("id", wordId);
   if (error) throw error;
 }
 

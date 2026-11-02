@@ -93,7 +93,71 @@ function wiktionaryAnswer(page: WiktionaryPage | "missing" | "unavailable", word
   return found("Wiktionary", `https://en.wiktionary.org/wiki/${encodeURIComponent(word)}`, toMeanings(page.en ?? []));
 }
 
-const INFLECTION = /\b(plural|past|participle|third-person|comparative|superlative|gerund)\b/i;
+const MAX_SUGGESTIONS = 4;
+
+// How many single-letter changes turn one word into the other.
+export function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      row.push(Math.min((row.at(j - 1) ?? 0) + 1, (previous.at(j) ?? 0) + 1, (previous.at(j - 1) ?? 0) + cost));
+    }
+    previous = row;
+  }
+  return previous.at(b.length) ?? 0;
+}
+
+// Keeps close spellings only, so "ephemral" suggests "ephemeral" but not "ephemerality".
+export function closeSpellings(word: string, candidates: string[]): string[] {
+  const allowed = Math.max(2, Math.floor(word.length / 3));
+  return candidates.filter((candidate) => {
+    const check = checkWord(candidate);
+    return check.ok && check.word === candidate && candidate !== word && editDistance(word, candidate) <= allowed;
+  });
+}
+
+// Wiktionary covers every language, so suggestions are checked for an English entry.
+async function englishOnly(words: string[], fetcher: FetchLike): Promise<string[]> {
+  const params = new URLSearchParams({
+    action: "query",
+    titles: words.join("|"),
+    prop: "categories",
+    clcategories: "Category:English lemmas|Category:English non-lemma forms",
+    cllimit: "max",
+    format: "json",
+    formatversion: "2",
+  });
+  const response = await fetcher(`https://en.wiktionary.org/w/api.php?${params}`, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!response.ok) return [];
+  const body = (await response.json()) as { query?: { pages?: { title?: string; categories?: unknown[] }[] } };
+  const english = new Set((body.query?.pages ?? []).filter((page) => page.categories?.length).map((page) => page.title));
+  return words.filter((word) => english.has(word));
+}
+
+// Suggestions are a convenience, so a failure here gives none rather than failing the lookup.
+export async function suggestSpellings(word: string, fetcher: FetchLike): Promise<string[]> {
+  try {
+    const params = new URLSearchParams({ action: "opensearch", search: word, limit: "10", profile: "fuzzy", namespace: "0", format: "json" });
+    const response = await fetcher(`https://en.wiktionary.org/w/api.php?${params}`, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!response.ok) return [];
+    const body = (await response.json()) as [string, string[]];
+    const close = closeSpellings(word, body[1] ?? []);
+    if (close.length === 0) return [];
+    return (await englishOnly(close, fetcher)).slice(0, MAX_SUGGESTIONS);
+  } catch {
+    return [];
+  }
+}
+
+const INFLECTION = /\b(plural|past|participle|third-person|comparative|superlative|gerund|misspelling)\b/i;
 const BASE_LINK = /form-of-definition-link[^>]*>.*?href="\/wiki\/([^"#]+)/s;
 
 // Wiktionary also marks spelling variants as forms, so only grammatical changes count as inflections.
@@ -178,5 +242,9 @@ export async function lookUp(
     }
   }
   // Reuses the page already fetched, so Wiktionary is only asked once about the typed word.
-  return askDictionaries(word, fetcher, wait, async () => typedPage);
+  const answer = await askDictionaries(word, fetcher, wait, async () => typedPage);
+  if (answer !== "unavailable" && answer.status === "not_found") {
+    return { status: "not_found", suggestions: await suggestSpellings(word, fetcher) };
+  }
+  return answer;
 }

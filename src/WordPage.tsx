@@ -1,11 +1,14 @@
 import type { SavedWord } from "./lib/api";
 import { savedOn } from "./lib/dates";
 import type { Meaning } from "./lib/definitions";
+import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 
 type WordPageProps = {
   word: SavedWord;
   lookupFailed: boolean;
   onRetry: () => void;
+  onChoose: (suggestion: string) => void;
+  onKeep: () => void;
   onBack: () => void;
 };
 
@@ -29,7 +32,7 @@ function MeaningList({ meanings }: { meanings: Meaning[] }) {
   );
 }
 
-function Definitions({ word, lookupFailed, onRetry }: Omit<WordPageProps, "onBack">) {
+function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<WordPageProps, "onBack">) {
   if (word.definition_status === "found" && word.definitions) {
     const { meanings, typedMeanings, source, sourceUrl } = word.definitions;
     return (
@@ -48,7 +51,12 @@ function Definitions({ word, lookupFailed, onRetry }: Omit<WordPageProps, "onBac
     );
   }
   if (word.definition_status === "not_found") {
-    return <p className="empty">No dictionary definition found for this word.</p>;
+    return (
+      <>
+        <p className="empty">No dictionary definition found for this word.</p>
+        {needsSpellingCheck(word) && <SpellingCheck word={word} failed={lookupFailed} onChoose={onChoose} onKeep={onKeep} />}
+      </>
+    );
   }
   if (lookupFailed) {
     return (
@@ -61,7 +69,7 @@ function Definitions({ word, lookupFailed, onRetry }: Omit<WordPageProps, "onBac
   return <p className="empty" role="status">Looking up this word…</p>;
 }
 
-export function WordPage({ word, lookupFailed, onRetry, onBack }: WordPageProps) {
+export function WordPage({ word, lookupFailed, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
   return (
     <article className="word-page">
       <button type="button" className="quiet" onClick={onBack}>Back to words</button>
@@ -80,7 +88,7 @@ export function WordPage({ word, lookupFailed, onRetry, onBack }: WordPageProps)
       ) : (
         <p className="empty">No book sentence saved with this word.</p>
       )}
-      <Definitions word={word} lookupFailed={lookupFailed} onRetry={onRetry} />
+      <Definitions word={word} lookupFailed={lookupFailed} onRetry={onRetry} onChoose={onChoose} onKeep={onKeep} />
     </article>
   );
 }

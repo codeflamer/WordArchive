@@ -20,6 +20,7 @@ vi.mock("../src/lib/api", () => ({
   addQuote: vi.fn(),
   defineWord: vi.fn(),
   saveDefinitions: vi.fn(),
+  keepAsTyped: vi.fn(),
   isOfflineError: vi.fn(),
 }));
 
@@ -79,7 +80,7 @@ describe("definitions", () => {
     const user = userEvent.setup();
     await saveWord(user, "sanction");
 
-    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("sanction", "found", definitions, null));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("sanction", "found", definitions, null, null));
     expect(mocked.defineWord).toHaveBeenCalledTimes(1);
     await user.click(await screen.findByRole("button", { name: "sanction" }));
     expect(await screen.findByText("An approval.")).toBeVisible();
@@ -104,7 +105,7 @@ describe("definitions", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "older" }));
     expect(await screen.findByText("An approval.")).toBeVisible();
-    expect(mocked.saveDefinitions).toHaveBeenCalledWith("older", "found", definitions, null);
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("older", "found", definitions, null, null);
   });
 
   it("says when no definition exists, and remembers that", async () => {
@@ -113,7 +114,7 @@ describe("definitions", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "zzzznotaword" }));
     expect(await screen.findByText("No dictionary definition found for this word.")).toBeVisible();
-    expect(mocked.saveDefinitions).toHaveBeenCalledWith("zzzznotaword", "not_found", null, null);
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("zzzznotaword", "not_found", null, null, []);
   });
 
   it("shows the base form and what was typed, in the list and on the word's page", async () => {
@@ -123,7 +124,7 @@ describe("definitions", () => {
     const user = userEvent.setup();
     await saveWord(user, "bored");
 
-    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("bored", "found", withTyped, "bore"));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("bored", "found", withTyped, "bore", null));
     await user.click(await screen.findByRole("button", { name: "bore" }));
     expect(screen.getByRole("heading", { name: "bore" })).toBeVisible();
     expect(screen.getAllByText("You typed bored").some((item) => item.checkVisibility?.() !== false)).toBe(true);
@@ -171,6 +172,122 @@ describe("definitions", () => {
     await saveWord(user, "sanction");
     await user.click(await screen.findByRole("button", { name: "sanction" }));
     expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
+  });
+});
+
+describe("typos and unknown words", () => {
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+    mocked.keepAsTyped.mockResolvedValue();
+  });
+
+  async function saveTypo(user: ReturnType<typeof userEvent.setup>, suggestions: string[] = ["ephemeral", "ephemera"]) {
+    mocked.addWord.mockResolvedValue(entry("ephemral"));
+    mocked.defineWord.mockResolvedValueOnce({ status: "not_found", suggestions });
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "ephemral{Enter}");
+    await screen.findByText("Check this word");
+  }
+
+  it("flags the word and offers suggestions right in the list", async () => {
+    const user = userEvent.setup();
+    await saveTypo(user);
+    expect(screen.getByRole("button", { name: "ephemeral" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "ephemera" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Keep ephemral as typed" })).toBeVisible();
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("ephemral", "not_found", null, null, ["ephemeral", "ephemera"]);
+  });
+
+  it("fixes a typo with one tap, keeping what was typed", async () => {
+    const user = userEvent.setup();
+    await saveTypo(user);
+    mocked.defineWord.mockResolvedValueOnce({ status: "found", definitions });
+    await user.click(screen.getByRole("button", { name: "ephemeral" }));
+
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("ephemral", "found", definitions, "ephemeral", null));
+    expect(mocked.defineWord).toHaveBeenLastCalledWith("ephemeral");
+    expect(await screen.findByText("You typed ephemral")).toBeVisible();
+    expect(screen.queryByText("Check this word")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Keep ephemral as typed" })).not.toBeInTheDocument();
+  });
+
+  it("uses the base form of a chosen spelling", async () => {
+    const user = userEvent.setup();
+    await saveTypo(user, ["runing"]);
+    mocked.defineWord.mockResolvedValueOnce({ status: "found", definitions, baseForm: "run" });
+    await user.click(screen.getByRole("button", { name: "runing" }));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenLastCalledWith("ephemral", "found", definitions, "run", null));
+  });
+
+  it("keeps a word as typed, with a visible flag that lasts", async () => {
+    const user = userEvent.setup();
+    await saveTypo(user);
+    await user.click(screen.getByRole("button", { name: "Keep ephemral as typed" }));
+
+    expect(mocked.keepAsTyped).toHaveBeenCalledWith("ephemral");
+    expect(await screen.findByText("Not in the dictionary")).toBeVisible();
+    expect(screen.queryByText("Check this word")).not.toBeInTheDocument();
+    expect(screen.queryByText("Did you mean")).not.toBeInTheDocument();
+  });
+
+  it("offers keeping when there are no suggestions", async () => {
+    const user = userEvent.setup();
+    await saveTypo(user, []);
+    expect(screen.queryByText("Did you mean")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep ephemral as typed" })).toBeVisible();
+  });
+
+  it("keeps the suggestions when a chosen spelling can't be defined", async () => {
+    const user = userEvent.setup();
+    await saveTypo(user);
+    mocked.defineWord.mockResolvedValueOnce({ status: "not_found", suggestions: [] });
+    await user.click(screen.getByRole("button", { name: "ephemeral" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That didn't save");
+    expect(screen.getByRole("button", { name: "ephemeral" })).toBeVisible();
+    expect(mocked.saveDefinitions).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers another try when keeping fails", async () => {
+    const user = userEvent.setup();
+    await saveTypo(user);
+    mocked.keepAsTyped.mockRejectedValueOnce(new Error("offline"));
+    await user.click(screen.getByRole("button", { name: "Keep ephemral as typed" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That didn't save");
+    expect(screen.getByText("Check this word")).toBeVisible();
+  });
+
+  it("offers the same choices on the word's page", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("ephemral"), definition_status: "not_found", spelling_suggestions: ["ephemeral"] }]);
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "ephemral" }));
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+    const page = screen.getByRole("article");
+    await user.click(within(page).getByRole("button", { name: "ephemeral" }));
+    expect(await screen.findByText("An approval.")).toBeVisible();
+  });
+
+  it("fetches suggestions once for a word flagged before they existed", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("older"), definition_status: "not_found" }]);
+    mocked.defineWord.mockResolvedValue({ status: "not_found", suggestions: [] });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "older" }));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("older", "not_found", null, null, []));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mocked.defineWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't look up a word already kept as typed", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("hobbitish"), definition_status: "not_found", kept_as_typed: true }]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "hobbitish" }));
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Keep hobbitish as typed" })).not.toBeInTheDocument();
   });
 });
 

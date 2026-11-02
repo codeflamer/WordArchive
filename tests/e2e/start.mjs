@@ -35,7 +35,8 @@ createServer((req, res) => {
     if (path === "/auth/v1/logout") return res.writeHead(204).end();
     if (path === "/api/define") {
       const word = new URL(req.url, "http://localhost").searchParams.get("word");
-      if (word === "zzzznotaword") return json(200, { status: "not_found" });
+      if (word === "zzzznotaword") return json(200, { status: "not_found", suggestions: [] });
+      if (word === "ephemral") return json(200, { status: "not_found", suggestions: ["ephemeral", "ephemera"] });
       if (word === "failsonce" && lookups++ === 0) return json(503, { error: "unavailable" });
       if (word === "bored") {
         return json(200, {

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { findBaseForm, lookUp, plainText } from "../worker/define";
+import { closeSpellings, editDistance, findBaseForm, lookUp, plainText, suggestSpellings } from "../worker/define";
 import { handleRequest, type Env } from "../worker/index";
 
 const FREE = "api.dictionaryapi.dev";
@@ -103,7 +103,7 @@ describe("looking up a word", () => {
 
   it("reports not found only when both services say so", async () => {
     const { fetcher } = services([() => reply(404, {})], [() => reply(404, {})]);
-    expect(await lookUp("zzzznotaword", fetcher, noWait)).toEqual({ status: "not_found" });
+    expect(await lookUp("zzzznotaword", fetcher, noWait)).toEqual({ status: "not_found", suggestions: [] });
   });
 
   it("never reports a word as missing when a service couldn't answer", async () => {
@@ -115,7 +115,7 @@ describe("looking up a word", () => {
 
   it("treats an entry with no usable definitions as not found", async () => {
     const { fetcher } = services([() => reply(200, [{ meanings: [{ partOfSpeech: "noun", definitions: [{ definition: "" }] }] }])], [() => reply(404, {})]);
-    expect(await lookUp("sanction", fetcher, noWait)).toEqual({ status: "not_found" });
+    expect(await lookUp("sanction", fetcher, noWait)).toEqual({ status: "not_found", suggestions: [] });
   });
 
   it("encodes words with apostrophes and hyphens", async () => {
@@ -227,7 +227,82 @@ describe("looking up a changed form", () => {
   it("asks Wiktionary only once about the typed word", async () => {
     const { fetcher, calls } = services([() => reply(404, {})], [() => reply(404, {})]);
     await lookUp("zzzznotaword", fetcher, noWait);
-    expect(calls.filter((url) => url.includes(WIKI))).toHaveLength(1);
+    expect(calls.filter((url) => url.includes("/page/definition/"))).toHaveLength(1);
+  });
+
+  it("corrects a word Wiktionary lists as a misspelling", async () => {
+    const page = { en: [entry("Verb", { definition: formOf("Misspelling", "receive") })] };
+    const body = [{ meanings: [{ partOfSpeech: "verb", definitions: [{ definition: "To get." }] }] }];
+    const { fetcher } = services([() => reply(200, body)], [() => reply(200, page)]);
+    expect(await lookUp("recieve", fetcher, noWait)).toMatchObject({ status: "found", baseForm: "receive" });
+  });
+});
+
+describe("suggesting spellings", () => {
+  const english = (...titles: string[]) => ({
+    query: { pages: titles.map((title) => ({ title, categories: [{ title: "Category:English lemmas" }] })) },
+  });
+
+  it("measures how far apart two spellings are", () => {
+    expect(editDistance("ephemral", "ephemeral")).toBe(1);
+    expect(editDistance("same", "same")).toBe(0);
+    expect(editDistance("", "abc")).toBe(3);
+    expect(editDistance("pulchritood", "pulchritude")).toBe(3);
+  });
+
+  it("keeps only close, single, lower-case words that differ from the typed word", () => {
+    // Real Wiktionary results from 2026-11-02.
+    expect(closeSpellings("ephemral", ["ephemeral", "ephemera", "ephedra", "ephemerality", "Ephemera"])).toEqual(["ephemeral", "ephemera", "ephedra"]);
+    expect(closeSpellings("blargle", ["blackleg"])).toEqual([]);
+    expect(closeSpellings("pulchritood", ["pulchritudinous", "pulchritude"])).toEqual(["pulchritude"]);
+    expect(closeSpellings("word", ["word", "ice cream", "wards"])).toEqual(["wards"]);
+  });
+
+  it("only suggests words with an English entry, in the order found", async () => {
+    const pages = { query: { pages: [{ title: "ephemera", categories: [{}] }, { title: "ephemeral", categories: [{}] }, { title: "ephemeron" }] } };
+    const { fetcher, calls } = services([], [() => reply(200, ["ephemral", ["ephemeral", "ephemeron", "ephemera"]]), () => reply(200, pages)]);
+    expect(await suggestSpellings("ephemral", fetcher)).toEqual(["ephemeral", "ephemera"]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain("profile=fuzzy");
+  });
+
+  it("limits how many it suggests", async () => {
+    const close = ["worda", "wordb", "wordc", "wordd", "worde", "wordf"];
+    const { fetcher } = services([], [() => reply(200, ["word", close]), () => reply(200, english(...close))]);
+    expect(await suggestSpellings("word", fetcher)).toHaveLength(4);
+  });
+
+  it("skips the English check when nothing is close", async () => {
+    const { fetcher, calls } = services([], [() => reply(200, ["blargle", ["blackleg"]])]);
+    expect(await suggestSpellings("blargle", fetcher)).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("gives no suggestions, rather than an error, when the search fails", async () => {
+    const down = services([], [() => reply(503)]);
+    expect(await suggestSpellings("ephemral", down.fetcher)).toEqual([]);
+    const offline = services([], []);
+    expect(await suggestSpellings("ephemral", offline.fetcher)).toEqual([]);
+    const checkDown = services([], [() => reply(200, ["ephemral", ["ephemeral"]]), () => reply(503)]);
+    expect(await suggestSpellings("ephemral", checkDown.fetcher)).toEqual([]);
+  });
+
+  it("adds suggestions to a word that wasn't found", async () => {
+    const { fetcher } = services(
+      [() => reply(404, {})],
+      [() => reply(404, {}), () => reply(200, ["ephemral", ["ephemeral"]]), () => reply(200, english("ephemeral"))],
+    );
+    expect(await lookUp("ephemral", fetcher, noWait)).toEqual({ status: "not_found", suggestions: ["ephemeral"] });
+  });
+
+  it("doesn't look for suggestions when a word was found, or no service could answer", async () => {
+    const foundWord = services([() => reply(200, freeBody)], [() => reply(404, {})]);
+    await lookUp("sanction", foundWord.fetcher, noWait);
+    expect(foundWord.calls.some((url) => url.includes("opensearch"))).toBe(false);
+
+    const down = services([() => reply(502), () => reply(502)], [() => reply(429)]);
+    expect(await lookUp("sanction", down.fetcher, noWait)).toBe("unavailable");
+    expect(down.calls.some((url) => url.includes("opensearch"))).toBe(false);
   });
 });
 

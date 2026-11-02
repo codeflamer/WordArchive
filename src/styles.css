@@ -251,6 +251,45 @@ button:focus-visible {
   margin-top: 1.5rem;
 }
 
+.word-flag {
+  flex-basis: 100%;
+  color: var(--error);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.spelling {
+  display: grid;
+  flex-basis: 100%;
+  gap: 0.25rem;
+  justify-items: start;
+  margin-top: 0.25rem;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.suggestion {
+  min-height: 2.75rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--ribbon);
+  border-radius: 2px;
+  background: none;
+  color: inherit;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.spelling-error {
+  margin: 0;
+  color: var(--error);
+  font-weight: 500;
+}
+
 .typed-heading {
   margin: 0.5rem 0 -0.5rem;
   padding-top: 1rem;
