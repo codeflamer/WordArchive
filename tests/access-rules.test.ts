@@ -32,6 +32,31 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/003_quotes.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/004_word_sentence.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/005_word_definitions.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/006_word_base_form.sql", "utf8"));
+});
+
+describe("base forms", () => {
+  it("stores a base form beside the typed word, which can't change", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('mitigated')");
+    await db.query("update public.words set base_form = 'mitigate'");
+    const { rows } = await db.query("select word, base_form from public.words");
+    expect(rows).toEqual([{ word: "mitigated", base_form: "mitigate" }]);
+    await expect(db.query("update public.words set word = 'x'")).rejects.toThrow(/permission denied/);
+  });
+
+  it("doesn't change another user's word", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('mitigated')");
+    await as("authenticated", BOB);
+    const result = await db.query("update public.words set base_form = 'forged'");
+    expect(result.affectedRows).toBe(0);
+  });
+
+  it("blocks signed-out changes", async () => {
+    await as("anon", null);
+    await expect(db.query("update public.words set base_form = 'x'")).rejects.toThrow(/permission denied/);
+  });
 });
 
 describe("definitions", () => {

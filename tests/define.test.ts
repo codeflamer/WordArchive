@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { lookUp, plainText } from "../worker/define";
+import { findBaseForm, lookUp, plainText } from "../worker/define";
 import { handleRequest, type Env } from "../worker/index";
 
 const FREE = "api.dictionaryapi.dev";
@@ -66,14 +66,14 @@ describe("looking up a word", () => {
         ],
       },
     });
-    expect(calls).toHaveLength(1);
+    expect(calls.filter((url) => url.includes(FREE))).toHaveLength(1);
   });
 
   it("retries a temporary error before using the backup", async () => {
     const { fetcher, calls } = services([() => reply(502), () => reply(200, freeBody)], []);
     const answer = await lookUp("sanction", fetcher, noWait);
     expect(answer).toMatchObject({ status: "found", definitions: { source: "Free Dictionary API, from Wiktionary" } });
-    expect(calls).toHaveLength(2);
+    expect(calls.filter((url) => url.includes(FREE))).toHaveLength(2);
   });
 
   it("falls back to Wiktionary when the main dictionary keeps failing", async () => {
@@ -121,7 +121,7 @@ describe("looking up a word", () => {
   it("encodes words with apostrophes and hyphens", async () => {
     const { fetcher, calls } = services([() => reply(200, freeBody)], []);
     await lookUp("o'clock", fetcher, noWait);
-    expect(calls[0]).toContain("/o'clock");
+    expect(calls.every((url) => url.includes("/o'clock"))).toBe(true);
   });
 
   it("limits very long entries", async () => {
@@ -132,6 +132,102 @@ describe("looking up a word", () => {
     if (answer === "unavailable" || answer.status !== "found") throw new Error("Expected a definition");
     expect(answer.definitions.meanings).toHaveLength(6);
     expect(answer.definitions.meanings[0].definitions).toHaveLength(8);
+  });
+});
+
+// The same markup Wiktionary returned for these words on 2026-11-02, shortened.
+const glossary = (name: string) => `<a rel="mw:WikiLink" href="/wiki/Appendix:Glossary#${name}" title="Appendix:Glossary">${name}</a>`;
+const formOf = (grammar: string, base: string) =>
+  `<span class="form-of-definition use-with-mention" about="#mwt1" typeof="mw:Transclusion">${grammar} of <span class="form-of-definition-link"><i class="Latn mention" lang="en"><a rel="mw:WikiLink" href="/wiki/${base}#English" title="${base}">${base}</a></i></span></span>`;
+const variantOf = (base: string) =>
+  `<span class="form-of-definition use-with-mention">Alternative spelling of <span class="form-of-definition-link"><i class="Latn mention" lang="en"><a rel="mw:WikiLink" href="/wiki/${base}#English" title="${base}">${base}</a></i></span></span>.`;
+const own = (text: string) => ({ definition: text });
+const entry = (partOfSpeech: string, ...definitions: { definition: string }[]) => ({ partOfSpeech, definitions });
+
+describe("finding a base form", () => {
+  it.each([
+    ["children", [entry("Noun", { definition: formOf(glossary("plural"), "child") })], "child"],
+    ["went", [entry("Verb", { definition: formOf(`simple ${glossary("past")}`, "go") }), entry("Noun", own("A course."))], "go"],
+    ["running", [entry("Verb", { definition: formOf(`present ${glossary("participle")}`, "run") }), entry("Adjective", own("Moving."), own("Present."))], "run"],
+    ["mitigated", [entry("Adjective", own("Lessened.")), entry("Verb", { definition: formOf(`simple ${glossary("past")}`, "mitigate") })], "mitigate"],
+    ["better", [entry("Adjective", { definition: formOf(glossary("comparative"), "good") }, own("Greater."))], "good"],
+  ])("treats %s as a changed form", (word, en, base) => {
+    expect(findBaseForm({ en }, word)).toBe(base);
+  });
+
+  it.each([
+    ["ephemeral", [entry("Adjective", own("Lasting a short time."), own("Existing one day."))]],
+    ["news", [entry("Noun", own("New information."), own("Media reports.")), entry("Noun", { definition: formOf(glossary("plural"), "new") })]],
+    ["interesting", [entry("Adjective", own("Holding attention."), own("Of concern.")), entry("Verb", { definition: formOf(`present ${glossary("participle")}`, "interest") })]],
+    ["bettor", [entry("Noun", { definition: variantOf("better") })]],
+  ])("keeps %s as it is", (word, en) => {
+    expect(findBaseForm({ en }, word)).toBeNull();
+  });
+
+  it("ignores a link that isn't one word, or is the same word", () => {
+    expect(findBaseForm({ en: [entry("Noun", { definition: formOf(glossary("plural"), "ice_cream") })] }, "icecreams")).toBeNull();
+    expect(findBaseForm({ en: [entry("Noun", { definition: formOf(glossary("plural"), "sheep") })] }, "sheep")).toBeNull();
+  });
+});
+
+describe("looking up a changed form", () => {
+  const boredPage = {
+    en: [
+      entry("Verb", { definition: formOf(`simple ${glossary("past")}`, "bore") }),
+      entry("Adjective", own("Suffering from <a href=\"/wiki/boredom\">boredom</a>.")),
+    ],
+  };
+  const boreBody = [{ meanings: [{ partOfSpeech: "verb", definitions: [{ definition: "To inspire boredom." }] }] }];
+
+  it("defines the base form, and keeps the typed word's own meanings", async () => {
+    const { fetcher, calls } = services([() => reply(200, boreBody)], [() => reply(200, boredPage)]);
+    const answer = await lookUp("bored", fetcher, noWait);
+    expect(answer).toEqual({
+      status: "found",
+      baseForm: "bore",
+      definitions: {
+        source: "Free Dictionary API, from Wiktionary",
+        sourceUrl: "https://en.wiktionary.org/wiki/bore",
+        meanings: [{ partOfSpeech: "verb", definitions: [{ definition: "To inspire boredom." }] }],
+        typedMeanings: [{ partOfSpeech: "adjective", definitions: [{ definition: "Suffering from boredom." }] }],
+      },
+    });
+    expect(calls.some((url) => url.endsWith("/bore"))).toBe(true);
+  });
+
+  it("leaves out typed meanings when the word has none", async () => {
+    const page = { en: [entry("Noun", { definition: formOf(glossary("plural"), "child") })] };
+    const { fetcher } = services([() => reply(200, boreBody)], [() => reply(200, page)]);
+    const answer = await lookUp("children", fetcher, noWait);
+    expect(answer).toMatchObject({ status: "found", baseForm: "child" });
+    if (answer === "unavailable" || answer.status !== "found") throw new Error("Expected a definition");
+    expect(answer.definitions.typedMeanings).toBeUndefined();
+  });
+
+  it("uses the backup for the base form when the main dictionary fails", async () => {
+    const page = { en: [entry("Noun", own("A young person."))] };
+    const { fetcher } = services([() => reply(502), () => reply(502)], [() => reply(200, boredPage), () => reply(200, page)]);
+    expect(await lookUp("bored", fetcher, noWait)).toMatchObject({ status: "found", baseForm: "bore", definitions: { source: "Wiktionary" } });
+  });
+
+  it("falls back to the typed word when the base form can't be defined", async () => {
+    const { fetcher } = services([() => reply(404, {}), () => reply(200, freeBody)], [() => reply(200, boredPage), () => reply(404, {})]);
+    const answer = await lookUp("bored", fetcher, noWait);
+    expect(answer).toMatchObject({ status: "found" });
+    expect(answer).not.toHaveProperty("baseForm");
+  });
+
+  it("still defines the typed word when Wiktionary can't be reached", async () => {
+    const { fetcher } = services([() => reply(200, freeBody)], [() => reply(429)]);
+    const answer = await lookUp("mitigated", fetcher, noWait);
+    expect(answer).toMatchObject({ status: "found" });
+    expect(answer).not.toHaveProperty("baseForm");
+  });
+
+  it("asks Wiktionary only once about the typed word", async () => {
+    const { fetcher, calls } = services([() => reply(404, {})], [() => reply(404, {})]);
+    await lookUp("zzzznotaword", fetcher, noWait);
+    expect(calls.filter((url) => url.includes(WIKI))).toHaveLength(1);
   });
 });
 

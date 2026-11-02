@@ -6,6 +6,7 @@ export type DefinitionStatus = "found" | "not_found";
 export type SavedWord = {
   id: string;
   word: string;
+  base_form?: string | null;
   sentence: string | null;
   created_at: string;
   book: { title: string } | null;
@@ -15,7 +16,7 @@ export type SavedWord = {
 
 export type SavedQuote = { id: string; body: string; created_at: string; book: { title: string; author: string } | null };
 
-const WORD_FIELDS = "id, word, sentence, created_at, definitions, definition_status, book:books(title)";
+const WORD_FIELDS = "id, word, base_form, sentence, created_at, definitions, definition_status, book:books(title)";
 const QUOTE_FIELDS = "id, body, created_at, book:books(title, author)";
 const BOOK_FIELDS = "id, title, author";
 
@@ -89,10 +90,15 @@ export async function defineWord(word: string): Promise<LookupResult> {
   return (await response.json()) as LookupResult;
 }
 
-export async function saveDefinitions(wordId: string, status: DefinitionStatus, definitions: Definitions | null): Promise<void> {
+export async function saveDefinitions(
+  wordId: string,
+  status: DefinitionStatus,
+  definitions: Definitions | null,
+  baseForm: string | null,
+): Promise<void> {
   const { error } = await client()
     .from("words")
-    .update({ definition_status: status, definitions })
+    .update({ definition_status: status, definitions, base_form: baseForm })
     .eq("id", wordId);
   if (error) throw error;
 }

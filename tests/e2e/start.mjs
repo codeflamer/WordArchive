@@ -37,6 +37,18 @@ createServer((req, res) => {
       const word = new URL(req.url, "http://localhost").searchParams.get("word");
       if (word === "zzzznotaword") return json(200, { status: "not_found" });
       if (word === "failsonce" && lookups++ === 0) return json(503, { error: "unavailable" });
+      if (word === "bored") {
+        return json(200, {
+          status: "found",
+          baseForm: "bore",
+          definitions: {
+            source: "Free Dictionary API, from Wiktionary",
+            sourceUrl: "https://en.wiktionary.org/wiki/bore",
+            meanings: [{ partOfSpeech: "verb", definitions: [{ definition: "To inspire boredom in somebody." }] }],
+            typedMeanings: [{ partOfSpeech: "adjective", definitions: [{ definition: "Suffering from boredom." }] }],
+          },
+        });
+      }
       return json(200, {
         status: "found",
         definitions: {

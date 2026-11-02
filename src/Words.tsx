@@ -52,9 +52,12 @@ export function Words({ book }: { book: Book | null | undefined }) {
     try {
       const result = await defineWord(entry.word);
       const definitions = result.status === "found" ? result.definitions : null;
-      await saveDefinitions(entry.id, result.status, definitions);
+      const baseForm = (result.status === "found" && result.baseForm) || null;
+      await saveDefinitions(entry.id, result.status, definitions, baseForm);
       setWords((list) =>
-        (list ?? []).map((item) => (item.id === entry.id ? { ...item, definitions, definition_status: result.status } : item)),
+        (list ?? []).map((item) =>
+          item.id === entry.id ? { ...item, definitions, definition_status: result.status, base_form: baseForm } : item,
+        ),
       );
     } catch {
       setFailedLookups((failed) => new Set(failed).add(entry.id));
@@ -154,9 +157,10 @@ export function Words({ book }: { book: Book | null | undefined }) {
             {words.map((entry) => (
               <li key={entry.id}>
                 <button type="button" className="headword" onClick={() => setOpenId(entry.id)}>
-                  {entry.word}
+                  {entry.base_form ?? entry.word}
                 </button>
                 <time dateTime={entry.created_at}>{savedOn.format(new Date(entry.created_at))}</time>
+                {entry.base_form && <span className="source">You typed {entry.word}</span>}
                 {entry.book && <cite className="source">{entry.book.title}</cite>}
               </li>
             ))}

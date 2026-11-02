@@ -21,6 +21,32 @@ A card can't move to Done until its full test is run again and passes.
 
 ## Resolved
 
+### ISS-011: Sign-out tests failed intermittently
+
+- **Card:** F06
+- **Found:** 2026-11-02
+- **Severity:** Minor
+- **Steps to reproduce:**
+  1. Run the automated tests several times.
+- **Expected:** The tests pass every time.
+- **Actual:** "clears any leftover copy when opening signed out" sometimes failed.
+- **Cause:** The test checked for the deleted copy at the moment the sign-in screen appeared, just before the app's deletion step ran. This followed the ISS-008 fix, which moved that deletion to after the screen closes.
+- **Fix:** The two sign-out tests now wait for the deletion. The app itself didn't change.
+- **Retest:** 2026-11-02, 10 of 10 full test runs passed.
+
+### ISS-010: Base form column missing from the real database
+
+- **Card:** F06
+- **Found:** 2026-11-02
+- **Severity:** Blocker
+- **Steps to reproduce:**
+  1. Run the pre-deploy check after `006_word_base_form.sql` was reported as run.
+- **Expected:** The `base_form` column exists and refuses signed-out access.
+- **Actual:** The database replied that the column doesn't exist (error 42703).
+- **Cause:** Unknown. The first run didn't take effect, and the same SQL succeeded on the second try.
+- **Fix:** Ran the SQL again. The pre-deploy check stopped the deploy until it passed.
+- **Retest:** 2026-11-02, the column exists and refuses signed-out reads and changes.
+
 ### ISS-007: Dictionary services fail temporarily
 
 - **Card:** F05

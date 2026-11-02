@@ -1,5 +1,6 @@
 import type { SavedWord } from "./lib/api";
 import { savedOn } from "./lib/dates";
+import type { Meaning } from "./lib/definitions";
 
 type WordPageProps = {
   word: SavedWord;
@@ -8,25 +9,40 @@ type WordPageProps = {
   onBack: () => void;
 };
 
+function MeaningList({ meanings }: { meanings: Meaning[] }) {
+  return (
+    <>
+      {meanings.map((meaning, index) => (
+        <div key={`${meaning.partOfSpeech}-${index}`}>
+          <h3 className="part-of-speech">{meaning.partOfSpeech}</h3>
+          <ol>
+            {meaning.definitions.map((item, itemIndex) => (
+              <li key={itemIndex}>
+                {item.definition}
+                {item.example && <p className="example">{item.example}</p>}
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function Definitions({ word, lookupFailed, onRetry }: Omit<WordPageProps, "onBack">) {
   if (word.definition_status === "found" && word.definitions) {
+    const { meanings, typedMeanings, source, sourceUrl } = word.definitions;
     return (
       <section className="definitions" aria-label="Definitions">
-        {word.definitions.meanings.map((meaning, index) => (
-          <div key={`${meaning.partOfSpeech}-${index}`}>
-            <h3 className="part-of-speech">{meaning.partOfSpeech}</h3>
-            <ol>
-              {meaning.definitions.map((item, itemIndex) => (
-                <li key={itemIndex}>
-                  {item.definition}
-                  {item.example && <p className="example">{item.example}</p>}
-                </li>
-              ))}
-            </ol>
-          </div>
-        ))}
+        <MeaningList meanings={meanings} />
+        {typedMeanings && (
+          <>
+            <h3 className="typed-heading">Meanings of “{word.word}” itself</h3>
+            <MeaningList meanings={typedMeanings} />
+          </>
+        )}
         <p className="attribution">
-          Source: <a href={word.definitions.sourceUrl} target="_blank" rel="noreferrer">{word.definitions.source}</a>, CC BY-SA
+          Source: <a href={sourceUrl} target="_blank" rel="noreferrer">{source}</a>, CC BY-SA
         </p>
       </section>
     );
@@ -49,7 +65,8 @@ export function WordPage({ word, lookupFailed, onRetry, onBack }: WordPageProps)
   return (
     <article className="word-page">
       <button type="button" className="quiet" onClick={onBack}>Back to words</button>
-      <h2 className="word-page-title">{word.word}</h2>
+      <h2 className="word-page-title">{word.base_form ?? word.word}</h2>
+      {word.base_form && <p className="source">You typed {word.word}</p>}
       <p className="source">
         {word.book && (
           <>

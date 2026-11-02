@@ -79,7 +79,7 @@ describe("definitions", () => {
     const user = userEvent.setup();
     await saveWord(user, "sanction");
 
-    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("sanction", "found", definitions));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("sanction", "found", definitions, null));
     expect(mocked.defineWord).toHaveBeenCalledTimes(1);
     await user.click(await screen.findByRole("button", { name: "sanction" }));
     expect(await screen.findByText("An approval.")).toBeVisible();
@@ -104,7 +104,7 @@ describe("definitions", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "older" }));
     expect(await screen.findByText("An approval.")).toBeVisible();
-    expect(mocked.saveDefinitions).toHaveBeenCalledWith("older", "found", definitions);
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("older", "found", definitions, null);
   });
 
   it("says when no definition exists, and remembers that", async () => {
@@ -113,7 +113,40 @@ describe("definitions", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "zzzznotaword" }));
     expect(await screen.findByText("No dictionary definition found for this word.")).toBeVisible();
-    expect(mocked.saveDefinitions).toHaveBeenCalledWith("zzzznotaword", "not_found", null);
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("zzzznotaword", "not_found", null, null);
+  });
+
+  it("shows the base form and what was typed, in the list and on the word's page", async () => {
+    const withTyped = { ...definitions, typedMeanings: [{ partOfSpeech: "adjective", definitions: [{ definition: "Weary." }] }] };
+    mocked.addWord.mockResolvedValue(entry("bored"));
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions: withTyped, baseForm: "bore" });
+    const user = userEvent.setup();
+    await saveWord(user, "bored");
+
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("bored", "found", withTyped, "bore"));
+    await user.click(await screen.findByRole("button", { name: "bore" }));
+    expect(screen.getByRole("heading", { name: "bore" })).toBeVisible();
+    expect(screen.getAllByText("You typed bored").some((item) => item.checkVisibility?.() !== false)).toBe(true);
+    expect(screen.getByRole("heading", { name: /Meanings of .bored. itself/ })).toBeVisible();
+    expect(screen.getByText("Weary.")).toBeVisible();
+    expect(screen.getByText("An approval.")).toBeVisible();
+  });
+
+  it("doesn't show a typed note when the word is already a base form", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("sanction"), definitions, definition_status: "found" }]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(screen.queryByText(/You typed/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /itself/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps working with a saved copy from before base forms existed", async () => {
+    const { base_form: _unused, ...oldEntry } = { ...entry("sanction"), base_form: null, definitions, definition_status: "found" as const };
+    localStorage.setItem("wordarchive.words.v1", JSON.stringify([oldEntry]));
+    mocked.listWords.mockRejectedValue(new Error("offline"));
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "sanction" })).toBeVisible();
   });
 
   it("keeps the word when a lookup fails, and offers another try", async () => {
@@ -195,7 +228,7 @@ describe("reading without signal", () => {
     await screen.findByRole("button", { name: "sanction" });
     await act(async () => notify(null));
     expect(await screen.findByLabelText("Password")).toBeVisible();
-    expect(localStorage.getItem("wordarchive.words.v1")).toBeNull();
+    await waitFor(() => expect(localStorage.getItem("wordarchive.words.v1")).toBeNull());
     expect(screen.queryByText("sanction")).not.toBeInTheDocument();
   });
 
@@ -204,7 +237,7 @@ describe("reading without signal", () => {
     mocked.getSession.mockResolvedValue(null);
     render(<App />);
     await screen.findByLabelText("Password");
-    expect(localStorage.getItem("wordarchive.words.v1")).toBeNull();
+    await waitFor(() => expect(localStorage.getItem("wordarchive.words.v1")).toBeNull());
   });
 });
 

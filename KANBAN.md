@@ -14,26 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F06: Save a word under its base form
-
-- **Depends on:** F05
-- **Requirements:** W4
-- **Story:** As the reader, I type "mitigated" and the app looks up and saves "mitigate".
-- **Screen:** Word shown in base form, with what you typed
-- **Server:** Cloudflare finds the base form during lookup
-- **Data:** Base form and original typed form both stored
-
-**Test steps**
-
-- [ ] Save "mitigated", "running" and "children".
-- [ ] Check the word shown for each one.
-
-**Passes if:** Each word is saved under its base form with its definition, and what you typed is still visible.
-
-**Effectiveness check:** Try 10 changed word forms from your own books. Record how many are correct.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F07: Handle typos and unknown words
 
 - **Depends on:** F05
@@ -314,6 +294,30 @@ None yet.
 
 ## Testing
 
+### F06: Save a word under its base form
+
+- **Depends on:** F05
+- **Requirements:** W4
+- **Story:** As the reader, I type "mitigated" and the app looks up and saves "mitigate".
+- **Screen:** Word shown in base form, with what you typed
+- **Server:** Cloudflare finds the base form during lookup
+- **Data:** Base form and original typed form both stored
+
+**Test steps**
+
+- [x] Save "mitigated", "running" and "children".
+- [x] Check the word shown for each one.
+
+**Passes if:** Each word is saved under its base form with its definition, and what you typed is still visible.
+
+**Effectiveness check:** Try 10 changed word forms from your own books. Record how many are correct.
+
+**Build progress:** Built, with all 108 automated tests passing. Detection gave the expected result on 22 of 23 real Wiktionary entries, with "ran" staying as typed. The flow works in a browser against the fake local server. Live, and the column on the real database refuses signed-out access. Waiting for the effectiveness result before moving to Done.
+
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: ISS-010, ISS-011
+
+## Done
+
 ### F05: See a dictionary definition for a saved word
 
 - **Depends on:** F01
@@ -338,11 +342,9 @@ None yet.
 
 **Effectiveness check:** Try 20 words from your own books. Record how many get a definition.
 
-**Build progress:** Live. All 86 automated tests pass, including the fallback to Wiktionary. The live server refuses signed-out requests and fake sign-ins. Waiting for the effectiveness result before moving to Done.
+**Build progress:** Live. All 86 automated tests pass, including the fallback to Wiktionary. The live server refuses signed-out requests and fake sign-ins.
 
-**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: ISS-007, ISS-008, ISS-009
-
-## Done
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Passed, 20 of 20 words got a definition | Issues: ISS-007, ISS-008, ISS-009
 
 ### F04: Save the book sentence with a word
 
