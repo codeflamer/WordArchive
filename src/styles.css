@@ -1,0 +1,268 @@
+/* A dictionary page with a bookmark ribbon: large headwords, one column, left aligned. */
+:root {
+  --paper: #eef1e6;
+  --ink: #1d2a26;
+  --faded: #586860;
+  --rule: #c3cbb9;
+  --ribbon: #6f2747;
+  --on-ribbon: #f7eef2;
+  --error: #9b1f2a;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #172320;
+    --ink: #e7ebdd;
+    --faded: #a2b0a6;
+    --rule: #38473f;
+    --ribbon: #b95f88;
+    --on-ribbon: #1c0d14;
+    --error: #f2a0a6;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1.0625rem/1.5 "Literata Variable", Georgia, serif;
+}
+
+.page {
+  position: relative;
+  max-width: 34rem;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(1.5rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.5rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+}
+
+.title {
+  margin: 0 4rem 2rem 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.ribbon {
+  position: absolute;
+  top: 0;
+  right: max(1.25rem, env(safe-area-inset-right));
+  width: 2.75rem;
+  padding: calc(env(safe-area-inset-top) + 0.75rem) 0 1.5rem;
+  background: var(--ribbon);
+  color: var(--on-ribbon);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: center;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 0.75rem), 0 100%);
+}
+
+label {
+  display: block;
+  color: var(--faded);
+}
+
+.stack,
+.capture {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.field {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+  border: 0;
+  border-bottom: 2px solid var(--ink);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 1.25rem;
+}
+
+.capture-field {
+  width: 100%;
+  padding: 0 0 0.25rem;
+  border: 0;
+  border-bottom: 2px solid var(--ink);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 2.75rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+input:focus {
+  outline: none;
+  border-bottom-color: var(--ribbon);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--ribbon);
+  outline-offset: 2px;
+}
+
+.primary {
+  justify-self: start;
+  min-height: 2.75rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  border: 0;
+  border-radius: 2px;
+  background: var(--ribbon);
+  color: var(--on-ribbon);
+  font-weight: 600;
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.quiet {
+  justify-self: start;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--faded);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.saved {
+  min-height: 1.5em;
+  margin: 0;
+  color: var(--faded);
+}
+
+.error {
+  margin: 0.75rem 0 0;
+  color: var(--error);
+  font-weight: 500;
+}
+
+.empty {
+  max-width: 28ch;
+  margin: 2rem 0;
+  color: var(--faded);
+}
+
+.entries {
+  margin: 1.5rem 0 2rem;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+  list-style: none;
+}
+
+.entries li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.headword {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.625rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+time {
+  color: var(--faded);
+  font-size: 0.9375rem;
+  font-variant-numeric: lining-nums;
+}
+
+.source {
+  flex-basis: 100%;
+  min-width: 0;
+  color: var(--faded);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+.reading {
+  margin: -1rem 0 1.75rem;
+}
+
+.reading p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.section {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.books {
+  margin: 1rem 0 2rem;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+  list-style: none;
+}
+
+.book {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.75rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.book[aria-current] {
+  border-bottom: 2px solid var(--ribbon);
+}
+
+.book-title {
+  font-size: 1.25rem;
+  font-style: italic;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.book-author {
+  color: var(--faded);
+  overflow-wrap: anywhere;
+}
+
+.book-current {
+  color: var(--ribbon);
+  font-weight: 600;
+}
+
+.add-book {
+  margin-top: 1.5rem;
+}
