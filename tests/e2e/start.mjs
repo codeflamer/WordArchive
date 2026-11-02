@@ -7,6 +7,7 @@ const words = [];
 const books = [];
 const quotes = [];
 let currentBookId = null;
+let lookups = 0;
 const base64url = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
 
 function session() {
@@ -19,7 +20,7 @@ function session() {
 createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] ?? "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
   if (req.method === "OPTIONS") return res.writeHead(204).end();
 
   let body = "";
@@ -32,11 +33,32 @@ createServer((req, res) => {
     const path = new URL(req.url, "http://localhost").pathname;
     if (path === "/auth/v1/token") return json(200, session());
     if (path === "/auth/v1/logout") return res.writeHead(204).end();
+    if (path === "/api/define") {
+      const word = new URL(req.url, "http://localhost").searchParams.get("word");
+      if (word === "zzzznotaword") return json(200, { status: "not_found" });
+      if (word === "failsonce" && lookups++ === 0) return json(503, { error: "unavailable" });
+      return json(200, {
+        status: "found",
+        definitions: {
+          source: "Free Dictionary API, from Wiktionary",
+          sourceUrl: `https://en.wiktionary.org/wiki/${word}`,
+          meanings: [
+            { partOfSpeech: "noun", definitions: [{ definition: "An approval, by an authority.", example: "It had official sanction." }, { definition: "A penalty or punishment." }] },
+            { partOfSpeech: "verb", definitions: [{ definition: "To give official approval to." }] },
+          ],
+        },
+      });
+    }
+    if (path === "/rest/v1/words" && req.method === "PATCH") {
+      const id = new URL(req.url, "http://localhost").searchParams.get("id")?.replace("eq.", "");
+      Object.assign(words.find((item) => item.id === id) ?? {}, JSON.parse(body));
+      return res.writeHead(204).end();
+    }
     if (path === "/rest/v1/words" && req.method === "GET") return json(200, words);
     if (path === "/rest/v1/words" && req.method === "POST") {
       const { word: text, book_id, sentence } = JSON.parse(body);
       const book = books.find((item) => item.id === book_id);
-      const word = { id: randomUUID(), word: text, sentence, created_at: new Date().toISOString(), book: book ? { title: book.title } : null };
+      const word = { id: randomUUID(), word: text, sentence, definitions: null, definition_status: null, created_at: new Date().toISOString(), book: book ? { title: book.title } : null };
       words.unshift(word);
       return json(201, word);
     }
@@ -67,6 +89,6 @@ createServer((req, res) => {
   });
 }).listen(54399);
 
-const vite = await createVite({ mode: "e2e", server: { port: Number(process.env.PORT) || 5173, strictPort: true } });
+const vite = await createVite({ mode: "e2e", server: { port: Number(process.env.PORT) || 5174, strictPort: true, proxy: { "/api": "http://localhost:54399" } } });
 await vite.listen();
 vite.printUrls();

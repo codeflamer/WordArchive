@@ -14,32 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F05: See a dictionary definition for a saved word
-
-- **Depends on:** F01
-- **Requirements:** M1
-- **Story:** As the reader, I save a word and its real dictionary definitions appear without my doing anything else.
-- **Screen:** Definitions on the word's page, with a loading state
-- **Server:** Cloudflare looks up Free Dictionary, then Wiktionary as a backup
-- **Data:** Definitions and their source stored with the word
-
-**Before starting**
-
-- [ ] Confirm the Free Dictionary API's limits and reliability, using a sample of real words.
-
-**Test steps**
-
-- [ ] Save "sanction" and open it.
-- [ ] Confirm its definitions and source are shown.
-- [ ] Reopen the word with Airplane Mode on.
-- [ ] Claude runs an automated test that forces the main dictionary to fail, to confirm Wiktionary is used.
-
-**Passes if:** Definitions appear, stay available offline once saved, and still arrive when the main dictionary fails.
-
-**Effectiveness check:** Try 20 words from your own books. Record how many get a definition.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F06: Save a word under its base form
 
 - **Depends on:** F05
@@ -340,7 +314,33 @@ None yet.
 
 ## Testing
 
-None yet.
+### F05: See a dictionary definition for a saved word
+
+- **Depends on:** F01
+- **Requirements:** M1
+- **Story:** As the reader, I save a word and its real dictionary definitions appear without my doing anything else.
+- **Screen:** Definitions on the word's page, with a loading state
+- **Server:** Cloudflare looks up Free Dictionary, then Wiktionary as a backup
+- **Data:** Definitions and their source stored with the word
+
+**Before starting**
+
+- [x] Confirm the Free Dictionary API's limits and reliability, using a sample of real words. No limit is published, and responses reported 450 requests. It finds real words but gives occasional temporary server errors, and it relies on donations (checked 2026-11-02, see ISS-007).
+
+**Test steps**
+
+- [x] Save "sanction" and open it.
+- [x] Confirm its definitions and source are shown.
+- [x] Reopen the word with Airplane Mode on.
+- [x] Claude runs an automated test that forces the main dictionary to fail, to confirm Wiktionary is used.
+
+**Passes if:** Definitions appear, stay available offline once saved, and still arrive when the main dictionary fails.
+
+**Effectiveness check:** Try 20 words from your own books. Record how many get a definition.
+
+**Build progress:** Live. All 86 automated tests pass, including the fallback to Wiktionary. The live server refuses signed-out requests and fake sign-ins. Waiting for the effectiveness result before moving to Done.
+
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: ISS-007, ISS-008, ISS-009
 
 ## Done
 

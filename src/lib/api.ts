@@ -1,11 +1,21 @@
-import { createClient, type Session } from "@supabase/supabase-js";
+import { createClient, isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
+import type { Definitions, LookupResult } from "./definitions";
 
 export type Book = { id: string; title: string; author: string };
-export type SavedWord = { id: string; word: string; sentence: string | null; created_at: string; book: { title: string } | null };
+export type DefinitionStatus = "found" | "not_found";
+export type SavedWord = {
+  id: string;
+  word: string;
+  sentence: string | null;
+  created_at: string;
+  book: { title: string } | null;
+  definitions: Definitions | null;
+  definition_status: DefinitionStatus | null;
+};
 
 export type SavedQuote = { id: string; body: string; created_at: string; book: { title: string; author: string } | null };
 
-const WORD_FIELDS = "id, word, sentence, created_at, book:books(title)";
+const WORD_FIELDS = "id, word, sentence, created_at, definitions, definition_status, book:books(title)";
 const QUOTE_FIELDS = "id, body, created_at, book:books(title, author)";
 const BOOK_FIELDS = "id, title, author";
 
@@ -27,8 +37,16 @@ export async function getSession(): Promise<Session | null> {
   return data.session;
 }
 
+// True when sign-in couldn't be checked because there's no connection, not because the reader is signed out.
+export function isOfflineError(error: unknown): boolean {
+  return isAuthRetryableFetchError(error);
+}
+
 export function onSessionChange(listener: (session: Session | null) => void): () => void {
-  const { data } = client().auth.onAuthStateChange((_event, session) => listener(session));
+  const { data } = client().auth.onAuthStateChange((event, session) => {
+    // getSession handles the first check. This event reports no session when offline, which isn't a sign-out.
+    if (event !== "INITIAL_SESSION") listener(session);
+  });
   return () => data.subscription.unsubscribe();
 }
 
@@ -59,6 +77,24 @@ export async function addWord(word: string, bookId: string | null, sentence: str
     .single();
   if (error) throw error;
   return data as unknown as SavedWord;
+}
+
+export async function defineWord(word: string): Promise<LookupResult> {
+  const session = await getSession();
+  if (!session) throw new Error("Not signed in");
+  const response = await fetch(`/api/define?word=${encodeURIComponent(word)}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  if (!response.ok) throw new Error(`Lookup failed: ${response.status}`);
+  return (await response.json()) as LookupResult;
+}
+
+export async function saveDefinitions(wordId: string, status: DefinitionStatus, definitions: Definitions | null): Promise<void> {
+  const { error } = await client()
+    .from("words")
+    .update({ definition_status: status, definitions })
+    .eq("id", wordId);
+  if (error) throw error;
 }
 
 export async function listQuotes(): Promise<SavedQuote[]> {

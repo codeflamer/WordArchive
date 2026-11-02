@@ -12,5 +12,5 @@
     "resolveJsonModule": true,
     "types": ["node", "vite/client", "vite-plugin-pwa/client", "@testing-library/jest-dom/vitest"]
   },
-  "include": ["src", "tests/*.ts"]
+  "include": ["src", "worker", "tests/*.ts"]
 }

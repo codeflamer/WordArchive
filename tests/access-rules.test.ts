@@ -31,6 +31,46 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/002_books.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/003_quotes.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/004_word_sentence.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/005_word_definitions.sql", "utf8"));
+});
+
+describe("definitions", () => {
+  const definitions = JSON.stringify({ source: "Test", sourceUrl: "https://example.test", meanings: [] });
+
+  it("lets a user fill in definitions on their own word", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    await db.query("update public.words set definitions = $1::jsonb, definition_status = 'found'", [definitions]);
+    const { rows } = await db.query<{ definition_status: string }>("select definition_status from public.words");
+    expect(rows).toEqual([{ definition_status: "found" }]);
+  });
+
+  it("doesn't change another user's word", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    await as("authenticated", BOB);
+    const result = await db.query("update public.words set definition_status = 'found'");
+    expect(result.affectedRows).toBe(0);
+    await as("authenticated", ALICE);
+    const { rows } = await db.query("select definition_status from public.words");
+    expect(rows).toEqual([{ definition_status: null }]);
+  });
+
+  it("still blocks changing the word, its sentence, its book or its owner", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    for (const column of ["word = 'x'", "sentence = 'x'", "book_id = null", `user_id = '${BOB}'`]) {
+      await expect(db.query(`update public.words set ${column}`)).rejects.toThrow(/permission denied/);
+    }
+  });
+
+  it("blocks signed-out updates and invalid statuses", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    await expect(db.query("update public.words set definition_status = 'maybe'")).rejects.toThrow(/check constraint/);
+    await as("anon", null);
+    await expect(db.query("update public.words set definition_status = 'found'")).rejects.toThrow(/permission denied/);
+  });
 });
 
 describe("book sentences", () => {
@@ -184,7 +224,7 @@ describe("words access rules", () => {
     await expect(db.query("insert into public.words (word) values ('x')")).rejects.toThrow(/permission denied/);
   });
 
-  it("keeps updates and deletes switched off for now", async () => {
+  it("keeps deletes and word changes switched off for now", async () => {
     await as("authenticated", ALICE);
     await expect(db.query("delete from public.words")).rejects.toThrow(/permission denied/);
     await expect(db.query("update public.words set word = 'x'")).rejects.toThrow(/permission denied/);

@@ -21,6 +21,45 @@ A card can't move to Done until its full test is run again and passes.
 
 ## Resolved
 
+### ISS-007: Dictionary services fail temporarily
+
+- **Card:** F05
+- **Found:** 2026-11-02
+- **Severity:** Major
+- **Steps to reproduce:**
+  1. Look up 22 words in a row on both services.
+- **Expected:** Each real word returns a definition.
+- **Actual:** The Free Dictionary API returned temporary 500 and 502 errors for 7 words, including when retried. Wiktionary returned 429 rate-limit errors after about 12 quick requests.
+- **Cause:** The Free Dictionary API is a donation-funded service with occasional server errors. Wikimedia limits how quickly a client can make requests.
+- **Fix:** The server retries the Free Dictionary API once, falls back to Wiktionary, and identifies itself to Wikimedia. If neither answers, the word stays saved with a "Try again" button.
+- **Retest:** 2026-11-02, the F05 iPhone test passed with a real lookup through Cloudflare. A long outage of both services hasn't been tried live.
+
+### ISS-009: Local preview looked down
+
+- **Card:** F05
+- **Found:** 2026-11-02
+- **Severity:** Minor
+- **Steps to reproduce:**
+  1. Open the browser pane after a browser check has finished.
+- **Expected:** The local preview loads.
+- **Actual:** The page failed to load, and `localhost:5173` showed another project, Spend Guard.
+- **Cause:** The local preview was stopped after each check. It was also set up on port 5173, which Spend Guard uses. The live app wasn't affected.
+- **Fix:** The local preview now uses port 5174.
+- **Retest:** 2026-11-02, local preview restarted on port 5174.
+
+### ISS-008: Saved words could stay on the phone after sign-out
+
+- **Card:** F05
+- **Found:** 2026-11-02
+- **Severity:** Major
+- **Steps to reproduce:**
+  1. Sign out just as the word list finishes refreshing.
+- **Expected:** The copy of the words on the phone is deleted.
+- **Actual:** The copy could be written back straight after it was deleted. An automated test failed in 3 of 4 runs.
+- **Cause:** The copy was deleted before the words screen's pending save had run.
+- **Fix:** The copy is now deleted only after the words screen has closed.
+- **Retest:** 2026-11-02, see the test runs in F05. It was caught before deploying, so it never reached the live app.
+
 ### ISS-004: Supabase blocks email template edits without custom SMTP
 
 - **Card:** F01

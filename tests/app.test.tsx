@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -18,6 +18,9 @@ vi.mock("../src/lib/api", () => ({
   setCurrentBook: vi.fn(),
   listQuotes: vi.fn(),
   addQuote: vi.fn(),
+  defineWord: vi.fn(),
+  saveDefinitions: vi.fn(),
+  isOfflineError: vi.fn(),
 }));
 
 const mocked = vi.mocked(api);
@@ -30,11 +33,22 @@ const entry = (word: string, title?: string, sentence: string | null = null) => 
   sentence,
   created_at: "2026-11-02T10:00:00Z",
   book: title ? { title } : null,
+  definitions: null,
+  definition_status: null,
 });
+const definitions = {
+  source: "Wiktionary",
+  sourceUrl: "https://en.wiktionary.org/wiki/sanction",
+  meanings: [{ partOfSpeech: "noun", definitions: [{ definition: "An approval.", example: "With sanction." }] }],
+};
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  localStorage.clear();
   mocked.onSessionChange.mockReturnValue(() => {});
+  mocked.isOfflineError.mockReturnValue(false);
+  mocked.defineWord.mockResolvedValue({ status: "not_found" });
+  mocked.saveDefinitions.mockResolvedValue();
   mocked.getCurrentBook.mockResolvedValue(null);
   mocked.listBooks.mockResolvedValue([]);
   mocked.listQuotes.mockResolvedValue([]);
@@ -45,6 +59,153 @@ const savedQuote = (body: string, book: { title: string; author: string } | null
   body,
   created_at: "2026-11-02T10:00:00Z",
   book,
+});
+
+describe("definitions", () => {
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+  });
+
+  async function saveWord(user: ReturnType<typeof userEvent.setup>, word: string) {
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), `${word}{Enter}`);
+  }
+
+  it("looks up and stores definitions automatically after saving", async () => {
+    mocked.addWord.mockResolvedValue(entry("sanction"));
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    const user = userEvent.setup();
+    await saveWord(user, "sanction");
+
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("sanction", "found", definitions));
+    expect(mocked.defineWord).toHaveBeenCalledTimes(1);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(await screen.findByText("An approval.")).toBeVisible();
+    expect(screen.getByText("With sanction.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Wiktionary" })).toHaveAttribute("href", definitions.sourceUrl);
+    expect(mocked.defineWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows stored definitions with no new lookup", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("sanction"), definitions, definition_status: "found" }]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(screen.getByText("An approval.")).toBeVisible();
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+  });
+
+  it("looks up an older word when it's opened", async () => {
+    mocked.listWords.mockResolvedValue([entry("older")]);
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "older" }));
+    expect(await screen.findByText("An approval.")).toBeVisible();
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("older", "found", definitions);
+  });
+
+  it("says when no definition exists, and remembers that", async () => {
+    mocked.listWords.mockResolvedValue([entry("zzzznotaword")]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "zzzznotaword" }));
+    expect(await screen.findByText("No dictionary definition found for this word.")).toBeVisible();
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("zzzznotaword", "not_found", null);
+  });
+
+  it("keeps the word when a lookup fails, and offers another try", async () => {
+    mocked.addWord.mockResolvedValue(entry("sanction"));
+    mocked.defineWord.mockRejectedValueOnce(new Error("offline"));
+    const user = userEvent.setup();
+    await saveWord(user, "sanction");
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The definition didn't load");
+    expect(mocked.defineWord).toHaveBeenCalledTimes(1);
+
+    mocked.defineWord.mockResolvedValueOnce({ status: "found", definitions });
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("An approval.")).toBeVisible();
+  });
+
+  it("offers another try when the definitions can't be stored", async () => {
+    mocked.addWord.mockResolvedValue(entry("sanction"));
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    mocked.saveDefinitions.mockRejectedValueOnce(new Error("offline"));
+    const user = userEvent.setup();
+    await saveWord(user, "sanction");
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
+  });
+});
+
+describe("reading without signal", () => {
+  const offlineError = new Error("offline");
+  const cachedWord = { ...entry("sanction"), definitions, definition_status: "found" as const };
+
+  it("shows saved words and definitions when the list can't refresh", async () => {
+    localStorage.setItem("wordarchive.words.v1", JSON.stringify([cachedWord]));
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockRejectedValue(offlineError);
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText(/seeing your saved copy/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "sanction" }));
+    expect(screen.getByText("An approval.")).toBeVisible();
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+  });
+
+  it("stays signed in when sign-in can't be checked with no signal", async () => {
+    localStorage.setItem("wordarchive.words.v1", JSON.stringify([cachedWord]));
+    mocked.getSession.mockRejectedValue(offlineError);
+    mocked.isOfflineError.mockReturnValue(true);
+    mocked.listWords.mockRejectedValue(offlineError);
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "sanction" })).toBeVisible();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  });
+
+  it("explains when there's nothing saved and no signal", async () => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockRejectedValue(offlineError);
+    render(<App />);
+    expect(await screen.findByText("Your words didn't load. Check your connection and reopen the app.")).toBeVisible();
+  });
+
+  it("keeps the saved copy up to date", async () => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([cachedWord]);
+    render(<App />);
+    await screen.findByRole("button", { name: "sanction" });
+    await waitFor(() => expect(localStorage.getItem("wordarchive.words.v1")).toContain("An approval."));
+  });
+
+  it("removes the saved copy on sign-out, so it can't be read afterwards", async () => {
+    localStorage.setItem("wordarchive.words.v1", JSON.stringify([cachedWord]));
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([cachedWord]);
+    let notify: (value: Awaited<ReturnType<typeof api.getSession>>) => void = () => {};
+    mocked.onSessionChange.mockImplementation((listener) => {
+      notify = listener;
+      return () => {};
+    });
+    render(<App />);
+    await screen.findByRole("button", { name: "sanction" });
+    await act(async () => notify(null));
+    expect(await screen.findByLabelText("Password")).toBeVisible();
+    expect(localStorage.getItem("wordarchive.words.v1")).toBeNull();
+    expect(screen.queryByText("sanction")).not.toBeInTheDocument();
+  });
+
+  it("clears any leftover copy when opening signed out", async () => {
+    localStorage.setItem("wordarchive.words.v1", JSON.stringify([cachedWord]));
+    mocked.getSession.mockResolvedValue(null);
+    render(<App />);
+    await screen.findByLabelText("Password");
+    expect(localStorage.getItem("wordarchive.words.v1")).toBeNull();
+  });
 });
 
 describe("book sentences", () => {
