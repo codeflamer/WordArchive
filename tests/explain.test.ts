@@ -160,6 +160,13 @@ describe("the explain endpoint", () => {
     expect((await send(post({ word: "sanction", definitions }), noKey)).status).toBe(503);
   });
 
+  it("treats AI as unavailable when it's turned off, without calling Groq, and leaves lookups alone", async () => {
+    const off = { ...env, AI_DISABLED: "true" };
+    expect((await send(post({ word: "sanction", definitions }), off)).status).toBe(503);
+    expect(fetcher.mock.calls.some(([url]) => String(url).includes("groq"))).toBe(false);
+    expect((await send(post({ word: "sanction", definitions }), { ...env, AI_DISABLED: "false" })).status).toBe(200);
+  });
+
   it("only allows POST", async () => {
     const response = await send(new Request("https://app.test/api/explain", { headers: { Authorization: "Bearer good" } }));
     expect(response.status).toBe(405);

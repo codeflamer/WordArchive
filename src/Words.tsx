@@ -63,6 +63,11 @@ export function Words({ book }: { book: Book | null | undefined }) {
     if (explaining.current.has(entry.id) || !entry.definitions) return;
     explaining.current.add(entry.id);
     setAiTried((tried) => new Set(tried).add(entry.id));
+    setAiFailed((failed) => {
+      const next = new Set(failed);
+      next.delete(entry.id);
+      return next;
+    });
     try {
       const content = await explainWord(entry.base_form ?? entry.word, entry.sentence, entry.definitions);
       await saveAiContent(entry.id, content);
@@ -196,6 +201,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
           word={openWord}
           lookupFailed={failedLookups.has(openWord.id)}
           aiFailed={aiFailed.has(openWord.id)}
+          onRetryAi={() => void explain(openWord)}
           onRetry={() => void lookUp(openWord)}
           onChoose={(suggestion) => void lookUp(openWord, suggestion)}
           onKeep={() => void keep(openWord)}
@@ -247,6 +253,9 @@ export function Words({ book }: { book: Book | null | undefined }) {
                 {entry.base_form && <span className="source">You typed {entry.word}</span>}
                 {entry.definition_status === "not_found" && (
                   <span className="word-flag">{entry.kept_as_typed ? "Not in the dictionary" : "Check this word"}</span>
+                )}
+                {entry.definition_status === "found" && !entry.ai_content && (aiFailed.has(entry.id) || !aiTried.has(entry.id)) && (
+                  <span className="word-flag">Incomplete</span>
                 )}
                 {entry.book && <cite className="source">{entry.book.title}</cite>}
                 {needsSpellingCheck(entry) && (

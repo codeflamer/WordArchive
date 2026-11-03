@@ -8,6 +8,7 @@ const books = [];
 const quotes = [];
 let currentBookId = null;
 let lookups = 0;
+let aiCalls = 0;
 const base64url = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
 
 function session() {
@@ -38,6 +39,7 @@ createServer((req, res) => {
     }
     if (path === "/api/explain") {
       const { word, sentence } = JSON.parse(body);
+      if (word === "failsai" && aiCalls++ === 0) return json(503, { error: "unavailable" });
       if (sentence?.includes("failai")) return json(503, { error: "unavailable" });
       return json(200, {
         chosenMeaning: sentence ? { partOfSpeech: "noun", definition: "A penalty or punishment." } : null,

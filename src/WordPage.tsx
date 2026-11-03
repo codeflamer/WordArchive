@@ -2,13 +2,14 @@ import { useState } from "react";
 import type { SavedWord } from "./lib/api";
 import { playWord } from "./lib/speak";
 import { savedOn } from "./lib/dates";
-import type { Meaning } from "./lib/definitions";
+import { dictionaryExamples, type Meaning } from "./lib/definitions";
 import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 
 type WordPageProps = {
   word: SavedWord;
   lookupFailed: boolean;
   aiFailed: boolean;
+  onRetryAi: () => void;
   onRetry: () => void;
   onChoose: (suggestion: string) => void;
   onKeep: () => void;
@@ -43,13 +44,29 @@ function Pronounce({ word }: { word: SavedWord }) {
   );
 }
 
-function AiHelp({ word, aiFailed }: { word: SavedWord; aiFailed: boolean }) {
+function AiHelp({ word, aiFailed, onRetryAi }: { word: SavedWord; aiFailed: boolean; onRetryAi: () => void }) {
   const content = word.ai_content;
+  if (!content && !aiFailed) return <p className="empty" role="status">Writing examples…</p>;
   if (!content) {
-    return aiFailed ? (
-      <p className="empty">AI examples aren't available right now.</p>
-    ) : (
-      <p className="empty" role="status">Writing examples…</p>
+    const examples = dictionaryExamples(word.definitions);
+    return (
+      <section className="ai-missing" aria-label="Incomplete">
+        <p className="word-flag">Incomplete</p>
+        <p className="ai-label">AI examples aren't available right now. Your word and its definitions are saved.</p>
+        <button type="button" className="play" onClick={onRetryAi}>Try AI again</button>
+        {examples.length > 0 ? (
+          <div>
+            <h3 className="ai-heading">Examples from the dictionary</h3>
+            <ol>
+              {examples.map((example, index) => (
+                <li key={index}>{example}</li>
+              ))}
+            </ol>
+          </div>
+        ) : (
+          <p className="ai-label">The dictionary has no examples for this word.</p>
+        )}
+      </section>
     );
   }
   return (
@@ -95,7 +112,7 @@ function MeaningList({ meanings }: { meanings: Meaning[] }) {
   );
 }
 
-function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<WordPageProps, "onBack" | "aiFailed">) {
+function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<WordPageProps, "onBack" | "aiFailed" | "onRetryAi">) {
   if (word.definition_status === "found" && word.definitions) {
     const { meanings, typedMeanings, source, sourceUrl } = word.definitions;
     return (
@@ -132,7 +149,7 @@ function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<Wor
   return <p className="empty" role="status">Looking up this word…</p>;
 }
 
-export function WordPage({ word, lookupFailed, aiFailed, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
+export function WordPage({ word, lookupFailed, aiFailed, onRetryAi, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
   return (
     <article className="word-page">
       <button type="button" className="quiet" onClick={onBack}>Back to words</button>
@@ -152,7 +169,7 @@ export function WordPage({ word, lookupFailed, aiFailed, onRetry, onChoose, onKe
       ) : (
         <p className="empty">No book sentence saved with this word.</p>
       )}
-      {word.definition_status === "found" && <AiHelp word={word} aiFailed={aiFailed} />}
+      {word.definition_status === "found" && <AiHelp word={word} aiFailed={aiFailed} onRetryAi={onRetryAi} />}
       <Definitions word={word} lookupFailed={lookupFailed} onRetry={onRetry} onChoose={onChoose} onKeep={onKeep} />
     </article>
   );

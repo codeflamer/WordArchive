@@ -14,29 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F09: Fall back to the dictionary when AI is unavailable
-
-- **Depends on:** F08
-- **Requirements:** M5, M6
-- **Story:** As the reader, I can still save a word when AI fails, and retry it later.
-- **Screen:** "Incomplete" label and a "Try AI again" button
-- **Server:** Cloudflare detects the Groq failure and returns dictionary examples
-- **Data:** Incomplete status stored with the word
-
-**Test steps**
-
-- [ ] Claude temporarily disables the AI key on a test setup.
-- [ ] Save a word.
-- [ ] Confirm dictionary examples and the incomplete label show.
-- [ ] Claude restores the key.
-- [ ] Tap "Try AI again".
-
-**Passes if:** The word saves during the failure, then gets its AI meaning and 3 examples on retry.
-
-**Effectiveness check:** An AI failure never stops a word being saved.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F10: Merge a repeated word into one entry
 
 - **Depends on:** F04
@@ -247,6 +224,35 @@ None yet.
 
 ## Testing
 
+None yet.
+
+## Done
+
+### F09: Fall back to the dictionary when AI is unavailable
+
+- **Depends on:** F08
+- **Requirements:** M5, M6
+- **Story:** As the reader, I can still save a word when AI fails, and retry it later.
+- **Screen:** "Incomplete" label and a "Try AI again" button
+- **Server:** Cloudflare reports when AI is unavailable, and can be deployed with AI turned off for this test
+- **Data:** A word with definitions but no AI content counts as incomplete, so no new column is needed
+
+**Test steps**
+
+- [x] Claude deploys with AI turned off, leaving the real key in place.
+- [x] Save a word.
+- [x] Confirm dictionary examples and the incomplete label show.
+- [x] Claude deploys with AI turned back on.
+- [x] Tap "Try AI again".
+
+**Passes if:** The word saves during the failure, then gets its AI meaning and 3 examples on retry.
+
+**Effectiveness check:** An AI failure never stops a word being saved.
+
+**Build progress:** Built, with all 204 automated tests passing, and the outage flow works in a browser against the fake local server. Both the outage and the retry passed on the iPhone, using a real deploy with AI turned off and then back on.
+
+**Test record:** Date: 2026-11-03 | Result: Passed on iPhone | Effectiveness: Passed, the word saved with AI turned off | Issues: None
+
 ### F19: Play a word's pronunciation
 
 - **Depends on:** F05
@@ -272,9 +278,9 @@ None yet.
 
 **Effectiveness check:** Play 20 words from your own books. Record how many sound right and are clear enough to repeat.
 
-**Build progress:** Live, with all 196 automated tests passing. The real database has the new column, and the live server refuses signed-out requests and fake sign-ins. Waiting for the effectiveness result before moving to Done.
+**Build progress:** Live, with all 196 automated tests passing. The real database has the new column, and the live server refuses signed-out requests and fake sign-ins.
 
-**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not measured, skipped at the owner's request on 2026-11-02 | Issues: None
 
 ### F08: Get the right meaning and 3 examples from AI
 
@@ -300,11 +306,9 @@ None yet.
 
 **Effectiveness check:** Try 20 real word and sentence pairs. Record how many meanings you judge correct.
 
-**Build progress:** Live, with all 166 automated tests passing. The Groq key is stored in Cloudflare and isn't in the published files. The AI endpoint refuses signed-out requests and fake sign-ins. Real Groq worked in the iPhone test. Waiting for the effectiveness result before moving to Done.
+**Build progress:** Live, with all 166 automated tests passing. The Groq key is stored in Cloudflare and isn't in the published files. The AI endpoint refuses signed-out requests and fake sign-ins. Real Groq worked in the iPhone test. Groq's free daily limit for the model wasn't confirmed.
 
-**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
-
-## Done
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not measured, skipped at the owner's request on 2026-11-02 | Issues: None
 
 ### F07: Handle typos and unknown words
 

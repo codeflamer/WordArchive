@@ -4,7 +4,8 @@ import { lookUp } from "./define";
 import { explain } from "./explain";
 import { lookUpPronunciation } from "./pronounce";
 
-export type Env = { SUPABASE_URL: string; SUPABASE_PUBLISHABLE_KEY: string; GROQ_API_KEY?: string };
+// AI_DISABLED lets a real AI outage be tested without touching the stored key.
+export type Env = { SUPABASE_URL: string; SUPABASE_PUBLISHABLE_KEY: string; GROQ_API_KEY?: string; AI_DISABLED?: string };
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -46,7 +47,8 @@ async function explainWord(request: Request, env: Env, fetcher: typeof fetch): P
   const check = checkWord(typeof body?.word === "string" ? body.word : "");
   const sentence = typeof body?.sentence === "string" ? body.sentence : null;
   if (!check.ok || !isDefinitions(body?.definitions)) return json(400, { error: "invalid_request" });
-  const ai = await explain(check.word, sentence, body.definitions, env.GROQ_API_KEY, (target, init) => fetcher(target, init));
+  const apiKey = env.AI_DISABLED === "true" ? undefined : env.GROQ_API_KEY;
+  const ai = await explain(check.word, sentence, body.definitions, apiKey, (target, init) => fetcher(target, init));
   return ai ? json(200, ai) : json(503, { error: "unavailable" });
 }
 

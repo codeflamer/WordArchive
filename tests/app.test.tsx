@@ -258,7 +258,7 @@ describe("AI meaning and examples", () => {
     mocked.explainWord.mockRejectedValue(new Error("unavailable"));
     const user = userEvent.setup();
     await saveAndOpen(user, "A line.");
-    expect(await screen.findByText("AI examples aren't available right now.")).toBeVisible();
+    expect(await screen.findByText(/AI examples aren't available right now/)).toBeVisible();
     expect(screen.getByText("An approval.")).toBeVisible();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(mocked.explainWord).toHaveBeenCalledTimes(1);
@@ -291,6 +291,117 @@ describe("AI meaning and examples", () => {
     await user.type(screen.getByLabelText("New word"), "zzzznotaword{Enter}");
     await screen.findByText("Check this word");
     expect(mocked.explainWord).not.toHaveBeenCalled();
+  });
+});
+
+describe("when AI is unavailable", () => {
+  const withExamples = {
+    source: "Wiktionary",
+    sourceUrl: "https://example.test",
+    meanings: [
+      {
+        partOfSpeech: "noun",
+        definitions: [
+          { definition: "One.", example: "Line one." },
+          { definition: "Two.", example: "Line two." },
+          { definition: "Three.", example: "Line one." },
+          { definition: "Four." },
+          { definition: "Five.", example: "Line three." },
+          { definition: "Six.", example: "Line four." },
+        ],
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+    mocked.addWord.mockResolvedValue(entry("sanction"));
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions: withExamples });
+    mocked.explainWord.mockRejectedValueOnce(new Error("unavailable"));
+  });
+
+  async function saveAndOpen(user: ReturnType<typeof userEvent.setup>) {
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "sanction{Enter}");
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalled());
+    await screen.findByText("Incomplete");
+  }
+
+  it("still saves the word and its definitions, and flags it in the list", async () => {
+    const user = userEvent.setup();
+    await saveAndOpen(user);
+    expect(mocked.addWord).toHaveBeenCalledWith("sanction", null, null);
+    expect(mocked.saveDefinitions).toHaveBeenCalledWith("sanction", "found", withExamples, null, null);
+    expect(mocked.saveAiContent).not.toHaveBeenCalled();
+    expect(screen.getByText("Incomplete")).toBeVisible();
+  });
+
+  it("shows up to 3 different dictionary examples, and the label, on the word's page", async () => {
+    const user = userEvent.setup();
+    await saveAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "sanction" }));
+    const box = screen.getByRole("region", { name: "Incomplete" });
+    expect(within(box).getByText("Incomplete")).toBeVisible();
+    expect(within(box).getByRole("heading", { name: "Examples from the dictionary" })).toBeVisible();
+    expect(within(box).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Line one.", "Line two.", "Line three."]);
+  });
+
+  it("says so when the dictionary has no examples", async () => {
+    const noExamples = { ...definitions, meanings: [{ partOfSpeech: "noun", definitions: [{ definition: "Plain." }] }] };
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions: noExamples });
+    const user = userEvent.setup();
+    await saveAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "sanction" }));
+    expect(screen.getByText("The dictionary has no examples for this word.")).toBeVisible();
+  });
+
+  it("fills in the AI content on Try AI again, and clears the label", async () => {
+    const user = userEvent.setup();
+    await saveAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "sanction" }));
+    await user.click(screen.getByRole("button", { name: "Try AI again" }));
+
+    expect(await screen.findByText("First AI line.")).toBeVisible();
+    expect(mocked.saveAiContent).toHaveBeenCalledWith("sanction", aiContent);
+    expect(mocked.explainWord).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Incomplete")).not.toBeInTheDocument();
+    expect(mocked.defineWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays incomplete if another try fails, and still allows more", async () => {
+    mocked.explainWord.mockRejectedValueOnce(new Error("unavailable"));
+    const user = userEvent.setup();
+    await saveAndOpen(user);
+    await user.click(screen.getByRole("button", { name: "sanction" }));
+    await user.click(screen.getByRole("button", { name: "Try AI again" }));
+    await waitFor(() => expect(mocked.explainWord).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "Try AI again" })).toBeVisible();
+    expect(mocked.saveAiContent).not.toHaveBeenCalled();
+  });
+
+  it("flags an older word with no AI content, until it's opened", async () => {
+    mocked.explainWord.mockReset();
+    mocked.explainWord.mockResolvedValue(aiContent);
+    mocked.listWords.mockResolvedValue([{ ...entry("older"), definitions, definition_status: "found" }]);
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("Incomplete")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "older" }));
+    expect(await screen.findByText("First AI line.")).toBeVisible();
+    expect(screen.queryByText("Incomplete")).not.toBeInTheDocument();
+  });
+
+  it("doesn't flag a word while AI is still working", async () => {
+    mocked.explainWord.mockReset();
+    mocked.explainWord.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "sanction{Enter}");
+    await waitFor(() => expect(mocked.explainWord).toHaveBeenCalled());
+    expect(screen.queryByText("Incomplete")).not.toBeInTheDocument();
   });
 });
 
