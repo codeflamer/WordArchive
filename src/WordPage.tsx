@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { SavedWord } from "./lib/api";
+import { playWord } from "./lib/speak";
 import { savedOn } from "./lib/dates";
 import type { Meaning } from "./lib/definitions";
 import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
@@ -12,6 +14,34 @@ type WordPageProps = {
   onKeep: () => void;
   onBack: () => void;
 };
+
+function Pronounce({ word }: { word: SavedWord }) {
+  const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const shown = word.base_form ?? word.word;
+
+  async function play() {
+    setFailed(false);
+    setPlaying(true);
+    const result = await playWord(shown, word.pronunciation?.audio);
+    setPlaying(false);
+    setFailed(result === "failed");
+  }
+
+  return (
+    <div className="pronounce">
+      {word.pronunciation?.text && <span className="phonetic">{word.pronunciation.text}</span>}
+      <button type="button" className="play" disabled={playing} aria-label={`Play pronunciation of ${shown}`} onClick={() => void play()}>
+        {playing ? "Playing…" : "Play pronunciation"}
+      </button>
+      {failed && (
+        <p className="play-error" role="alert">
+          The sound didn't play. Check your connection and your volume, then try again.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function AiHelp({ word, aiFailed }: { word: SavedWord; aiFailed: boolean }) {
   const content = word.ai_content;
@@ -107,6 +137,7 @@ export function WordPage({ word, lookupFailed, aiFailed, onRetry, onChoose, onKe
     <article className="word-page">
       <button type="button" className="quiet" onClick={onBack}>Back to words</button>
       <h2 className="word-page-title">{word.base_form ?? word.word}</h2>
+      <Pronounce key={word.id} word={word} />
       {word.base_form && <p className="source">You typed {word.word}</p>}
       <p className="source">
         {word.book && (

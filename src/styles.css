@@ -251,6 +251,41 @@ button:focus-visible {
   margin-top: 1.5rem;
 }
 
+.pronounce {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+.phonetic {
+  min-width: 0;
+  color: var(--faded);
+  overflow-wrap: anywhere;
+}
+
+.play {
+  min-height: 2.75rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--ribbon);
+  border-radius: 2px;
+  background: none;
+  color: inherit;
+  font-weight: 600;
+}
+
+.play:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.play-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--error);
+  font-weight: 500;
+}
+
 .ai-help {
   display: grid;
   gap: 0.75rem;

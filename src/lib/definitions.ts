@@ -8,6 +8,9 @@ export type Definitions = {
   typedMeanings?: Meaning[];
 };
 
+// Either part can be missing. Words with no recording are read aloud by the phone's own voice.
+export type Pronunciation = { audio: string | null; text: string | null };
+
 // Written by AI, so the app always labels it. A chosen meaning needs a book sentence to choose from.
 export type AiContent = {
   chosenMeaning: { partOfSpeech: string; definition: string } | null;

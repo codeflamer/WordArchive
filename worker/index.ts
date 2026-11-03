@@ -2,6 +2,7 @@ import type { Definitions } from "../src/lib/definitions";
 import { checkWord } from "../src/lib/word";
 import { lookUp } from "./define";
 import { explain } from "./explain";
+import { lookUpPronunciation } from "./pronounce";
 
 export type Env = { SUPABASE_URL: string; SUPABASE_PUBLISHABLE_KEY: string; GROQ_API_KEY?: string };
 
@@ -25,6 +26,13 @@ async function define(url: URL, fetcher: typeof fetch): Promise<Response> {
   return answer === "unavailable" ? json(503, { error: "unavailable" }) : json(200, answer);
 }
 
+async function pronounce(url: URL, fetcher: typeof fetch): Promise<Response> {
+  const check = checkWord(url.searchParams.get("word") ?? "");
+  if (!check.ok) return json(400, { error: "invalid_word" });
+  const answer = await lookUpPronunciation(check.word, (target, init) => fetcher(target, init));
+  return answer === "unavailable" ? json(503, { error: "unavailable" }) : json(200, answer);
+}
+
 function isDefinitions(value: unknown): value is Definitions {
   const meanings = (value as Definitions | null)?.meanings;
   return (
@@ -45,8 +53,8 @@ async function explainWord(request: Request, env: Env, fetcher: typeof fetch): P
 export async function handleRequest(request: Request, env: Env, fetcher: typeof fetch = fetch): Promise<Response> {
   const url = new URL(request.url);
   const route = `${request.method} ${url.pathname}`;
-  if (url.pathname !== "/api/define" && url.pathname !== "/api/explain") return json(404, { error: "not_found" });
-  if (route !== "GET /api/define" && route !== "POST /api/explain") return json(405, { error: "method_not_allowed" });
+  if (!["/api/define", "/api/explain", "/api/pronounce"].includes(url.pathname)) return json(404, { error: "not_found" });
+  if (!["GET /api/define", "POST /api/explain", "GET /api/pronounce"].includes(route)) return json(405, { error: "method_not_allowed" });
 
   try {
     if (!(await isSignedIn(request, env, fetcher))) return json(401, { error: "sign_in_required" });
@@ -54,7 +62,9 @@ export async function handleRequest(request: Request, env: Env, fetcher: typeof 
     return json(503, { error: "unavailable" });
   }
 
-  return route === "GET /api/define" ? define(url, fetcher) : explainWord(request, env, fetcher);
+  if (route === "GET /api/define") return define(url, fetcher);
+  if (route === "GET /api/pronounce") return pronounce(url, fetcher);
+  return explainWord(request, env, fetcher);
 }
 
 export default {

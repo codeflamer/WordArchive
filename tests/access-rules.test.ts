@@ -35,6 +35,28 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/006_word_base_form.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/007_word_spelling.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/008_word_ai_content.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/009_word_pronunciation.sql", "utf8"));
+});
+
+describe("pronunciation", () => {
+  const value = JSON.stringify({ audio: null, text: "/a/" });
+
+  it("stores a pronunciation on a user's own word", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    await db.query("update public.words set pronunciation = $1::jsonb", [value]);
+    const { rows } = await db.query("select pronunciation from public.words");
+    expect(rows).toEqual([{ pronunciation: { audio: null, text: "/a/" } }]);
+  });
+
+  it("doesn't change another user's word, and blocks signed-out changes", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (word) values ('sanction')");
+    await as("authenticated", BOB);
+    expect((await db.query("update public.words set pronunciation = $1::jsonb", [value])).affectedRows).toBe(0);
+    await as("anon", null);
+    await expect(db.query("update public.words set pronunciation = $1::jsonb", [value])).rejects.toThrow(/permission denied/);
+  });
 });
 
 describe("AI content", () => {

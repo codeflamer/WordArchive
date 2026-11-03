@@ -247,6 +247,35 @@ None yet.
 
 ## Testing
 
+### F19: Play a word's pronunciation
+
+- **Depends on:** F05
+- **Requirements:** New, requested 2026-11-02
+- **Story:** As the reader, I tap a word and hear how it's said, so I can learn words I've only seen in print.
+- **Screen:** Play button and written pronunciation on the word's page
+- **Server:** Cloudflare returns the dictionary's recording and written pronunciation
+- **Data:** Recording link and written pronunciation stored with the word
+
+**Before starting**
+
+- [x] Check how many words have recordings. The Free Dictionary API had a recording for 18 of 20 sampled words, including rare ones, and written pronunciation for all 20 (checked 2026-11-02).
+
+**Test steps**
+
+- [x] Open "sanction" and tap play, with your iPhone's silent switch off.
+- [x] Open "pulchritude", which has no recording, and tap play. Your iPhone's own voice should say it.
+- [x] Open a word saved before this feature existed, and tap play.
+- [x] Turn on Airplane Mode and tap play on a word.
+- [x] Claude runs automated tests for choosing a recording and falling back to the iPhone's voice.
+
+**Passes if:** Every word can be played, the sound matches the word, and the button says clearly when nothing can be played.
+
+**Effectiveness check:** Play 20 words from your own books. Record how many sound right and are clear enough to repeat.
+
+**Build progress:** Live, with all 196 automated tests passing. The real database has the new column, and the live server refuses signed-out requests and fake sign-ins. Waiting for the effectiveness result before moving to Done.
+
+**Test record:** Date: 2026-11-02 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
+
 ### F08: Get the right meaning and 3 examples from AI
 
 - **Depends on:** F04, F05

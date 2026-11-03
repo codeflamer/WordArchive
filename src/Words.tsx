@@ -5,8 +5,10 @@ import {
   explainWord,
   keepAsTyped,
   listWords,
+  pronounceWord,
   saveAiContent,
   saveDefinitions,
+  savePronunciation,
   type Book,
   type SavedWord,
 } from "./lib/api";
@@ -22,6 +24,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
   const [failedLookups, setFailedLookups] = useState<ReadonlySet<string>>(new Set());
   const [aiTried, setAiTried] = useState<ReadonlySet<string>>(new Set());
   const [aiFailed, setAiFailed] = useState<ReadonlySet<string>>(new Set());
+  const [pronunciationTried, setPronunciationTried] = useState<ReadonlySet<string>>(new Set());
   const [draft, setDraft] = useState("");
   const [sentence, setSentence] = useState("");
   const [busy, setBusy] = useState(false);
@@ -133,6 +136,22 @@ export function Words({ book }: { book: Book | null | undefined }) {
   useEffect(() => {
     if (needsAi && openWord) void explain(openWord);
   }, [needsAi, openWord, explain]);
+
+  // Fetched on opening, so a recording is ready when play is tapped. A failure just leaves the phone's own voice.
+  const needsPronunciation =
+    openWord !== undefined && openWord.definition_status === "found" && !openWord.pronunciation && !pronunciationTried.has(openWord.id);
+  const pronouncingId = needsPronunciation ? openWord.id : null;
+  const pronouncingWord = needsPronunciation ? (openWord.base_form ?? openWord.word) : null;
+  useEffect(() => {
+    if (!pronouncingId || !pronouncingWord) return;
+    setPronunciationTried((tried) => new Set(tried).add(pronouncingId));
+    pronounceWord(pronouncingWord)
+      .then(async (pronunciation) => {
+        await savePronunciation(pronouncingId, pronunciation);
+        setWords((list) => (list ?? []).map((item) => (item.id === pronouncingId ? { ...item, pronunciation } : item)));
+      })
+      .catch(() => {});
+  }, [pronouncingId, pronouncingWord]);
 
   async function save(event: FormEvent) {
     event.preventDefault();

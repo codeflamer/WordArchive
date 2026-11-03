@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import * as api from "../src/lib/api";
+import { playWord } from "../src/lib/speak";
 
 vi.mock("../src/lib/api", () => ({
   isConfigured: true,
@@ -23,8 +24,12 @@ vi.mock("../src/lib/api", () => ({
   keepAsTyped: vi.fn(),
   explainWord: vi.fn(),
   saveAiContent: vi.fn(),
+  pronounceWord: vi.fn(),
+  savePronunciation: vi.fn(),
   isOfflineError: vi.fn(),
 }));
+
+vi.mock("../src/lib/speak", () => ({ playWord: vi.fn() }));
 
 const mocked = vi.mocked(api);
 const session = { access_token: "token" } as Awaited<ReturnType<typeof api.getSession>>;
@@ -56,6 +61,9 @@ beforeEach(() => {
   mocked.saveDefinitions.mockResolvedValue();
   mocked.explainWord.mockResolvedValue(aiContent);
   mocked.saveAiContent.mockResolvedValue();
+  mocked.pronounceWord.mockResolvedValue({ audio: null, text: null });
+  mocked.savePronunciation.mockResolvedValue();
+  vi.mocked(playWord).mockResolvedValue("played");
   mocked.getCurrentBook.mockResolvedValue(null);
   mocked.listBooks.mockResolvedValue([]);
   mocked.listQuotes.mockResolvedValue([]);
@@ -283,6 +291,89 @@ describe("AI meaning and examples", () => {
     await user.type(screen.getByLabelText("New word"), "zzzznotaword{Enter}");
     await screen.findByText("Check this word");
     expect(mocked.explainWord).not.toHaveBeenCalled();
+  });
+});
+
+describe("pronunciation", () => {
+  const found = (word: string, extra = {}) => ({ ...entry(word), definitions, definition_status: "found" as const, ai_content: aiContent, ...extra });
+  const recording = { audio: "https://example.test/word-us.mp3", text: "/ˈsæŋkʃən/" };
+
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+  });
+
+  async function open(word: string, row: ReturnType<typeof found>) {
+    mocked.listWords.mockResolvedValue([row]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: word }));
+    return user;
+  }
+
+  it("fetches and saves the pronunciation when a word is opened", async () => {
+    mocked.pronounceWord.mockResolvedValue(recording);
+    await open("sanction", found("sanction"));
+    expect(mocked.pronounceWord).toHaveBeenCalledWith("sanction");
+    await waitFor(() => expect(mocked.savePronunciation).toHaveBeenCalledWith("sanction", recording));
+    expect(await screen.findByText("/ˈsæŋkʃən/")).toBeVisible();
+    expect(mocked.pronounceWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("plays the recording on a tap", async () => {
+    const user = await open("sanction", found("sanction", { pronunciation: recording }));
+    await user.click(screen.getByRole("button", { name: "Play pronunciation of sanction" }));
+    expect(playWord).toHaveBeenCalledWith("sanction", recording.audio);
+    expect(mocked.pronounceWord).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "Play pronunciation of sanction" })).toBeEnabled();
+  });
+
+  it("uses the base form for a changed word", async () => {
+    const user = await open("mitigate", found("mitigated", { base_form: "mitigate" }));
+    expect(mocked.pronounceWord).toHaveBeenCalledWith("mitigate");
+    await user.click(screen.getByRole("button", { name: "Play pronunciation of mitigate" }));
+    expect(playWord).toHaveBeenCalledWith("mitigate", null);
+  });
+
+  it("still offers play when the pronunciation lookup fails", async () => {
+    mocked.pronounceWord.mockRejectedValue(new Error("unavailable"));
+    const user = await open("sanction", found("sanction"));
+    await user.click(await screen.findByRole("button", { name: "Play pronunciation of sanction" }));
+    expect(playWord).toHaveBeenCalledWith("sanction", undefined);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(mocked.pronounceWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("can read aloud a word that isn't in the dictionary, with no lookup", async () => {
+    const row = { ...entry("hobbitish"), definition_status: "not_found" as const, kept_as_typed: true };
+    mocked.listWords.mockResolvedValue([row]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "hobbitish" }));
+    await user.click(screen.getByRole("button", { name: "Play pronunciation of hobbitish" }));
+    expect(playWord).toHaveBeenCalledWith("hobbitish", undefined);
+    expect(mocked.pronounceWord).not.toHaveBeenCalled();
+  });
+
+  it("explains when nothing could play, and allows another try", async () => {
+    vi.mocked(playWord).mockResolvedValueOnce("failed");
+    const user = await open("sanction", found("sanction", { pronunciation: recording }));
+    await user.click(screen.getByRole("button", { name: "Play pronunciation of sanction" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The sound didn't play");
+    await user.click(screen.getByRole("button", { name: "Play pronunciation of sanction" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("shows a playing state and blocks repeat taps meanwhile", async () => {
+    let finish: (result: "played") => void = () => {};
+    vi.mocked(playWord).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    const user = await open("sanction", found("sanction", { pronunciation: recording }));
+    await user.click(screen.getByRole("button", { name: "Play pronunciation of sanction" }));
+    const button = screen.getByRole("button", { name: "Play pronunciation of sanction" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent("Playing…");
+    await act(async () => finish("played"));
+    expect(button).toBeEnabled();
   });
 });
 

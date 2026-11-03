@@ -33,6 +33,9 @@ createServer((req, res) => {
     const path = new URL(req.url, "http://localhost").pathname;
     if (path === "/auth/v1/token") return json(200, session());
     if (path === "/auth/v1/logout") return res.writeHead(204).end();
+    if (path === "/api/pronounce") {
+      return json(200, { audio: null, text: "/ˈsæŋkʃən/" });
+    }
     if (path === "/api/explain") {
       const { word, sentence } = JSON.parse(body);
       if (sentence?.includes("failai")) return json(503, { error: "unavailable" });
