@@ -294,6 +294,186 @@ describe("AI meaning and examples", () => {
   });
 });
 
+describe("repeated words", () => {
+  const foundRow = (id: string, extra = {}) => ({
+    ...entry("sanction"),
+    id,
+    definitions,
+    definition_status: "found" as const,
+    ai_content: aiContent,
+    ...extra,
+  });
+
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+  });
+
+  async function saveRepeat(user: ReturnType<typeof userEvent.setup>, line?: string) {
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "sanction");
+    if (line) await user.type(screen.getByLabelText("Sentence from the book (optional)"), line);
+    await user.click(screen.getByRole("button", { name: "Save word" }));
+  }
+
+  it("shows existing repeats as one entry, and counts it once", async () => {
+    mocked.listWords.mockResolvedValue([foundRow("b"), foundRow("a")]);
+    render(<App />);
+    expect(await screen.findAllByRole("button", { name: "sanction" })).toHaveLength(1);
+    expect(screen.getByLabelText("1 word saved")).toBeInTheDocument();
+  });
+
+  it("adds a repeat to the entry, reusing the definitions with no new lookup", async () => {
+    mocked.listWords.mockResolvedValue([foundRow("a", { created_at: "2026-11-01T10:00:00Z" })]);
+    mocked.addWord.mockResolvedValue({ ...entry("sanction"), id: "b", book: { title: "Beloved" } });
+    const user = userEvent.setup();
+    render(<App />);
+    await saveRepeat(user);
+
+    expect(await screen.findByRole("status", { name: "" })).toBeInTheDocument();
+    expect(screen.getAllByRole("status").some((item) => item.textContent === "Added to sanction")).toBe(true);
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("b", "found", definitions, null, null));
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+    expect(mocked.explainWord).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button", { name: "sanction" })).toHaveLength(1);
+    expect(screen.getByText("Beloved")).toBeVisible();
+    expect(screen.getByLabelText("1 word saved")).toBeInTheDocument();
+  });
+
+  it("asks AI about a repeat's new sentence only", async () => {
+    mocked.listWords.mockResolvedValue([foundRow("a", { created_at: "2026-11-01T10:00:00Z" })]);
+    mocked.addWord.mockResolvedValue({ ...entry("sanction", undefined, "A new line."), id: "b" });
+    const user = userEvent.setup();
+    render(<App />);
+    await saveRepeat(user, "A new line.");
+    await waitFor(() => expect(mocked.explainWord).toHaveBeenCalledWith("sanction", "A new line.", definitions));
+    expect(mocked.explainWord).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocked.saveAiContent).toHaveBeenCalledWith("b", aiContent));
+  });
+
+  it("recognises a repeat by the form that was typed", async () => {
+    mocked.listWords.mockResolvedValue([{ ...foundRow("a"), word: "mitigated", base_form: "mitigate" }]);
+    mocked.addWord.mockResolvedValue({ ...entry("mitigated"), id: "b" });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    await user.type(screen.getByLabelText("New word"), "mitigated{Enter}");
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("b", "found", definitions, "mitigate", null));
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button", { name: "mitigate" })).toHaveLength(1);
+  });
+
+  it("does a normal lookup for a word still waiting on its first one", async () => {
+    mocked.listWords.mockResolvedValue([{ ...entry("sanction"), id: "a" }]);
+    mocked.addWord.mockResolvedValue({ ...entry("sanction"), id: "b" });
+    const user = userEvent.setup();
+    render(<App />);
+    await saveRepeat(user);
+    await waitFor(() => expect(mocked.defineWord).toHaveBeenCalledWith("sanction"));
+  });
+
+  it("shows every sentence and its book, each with its own meaning", async () => {
+    mocked.listWords.mockResolvedValue([
+      foundRow("b", {
+        created_at: "2026-11-02T10:00:00Z",
+        sentence: "It punished them.",
+        book: { title: "Beloved" },
+        ai_content: { ...aiContent, chosenMeaning: { partOfSpeech: "noun", definition: "A penalty." } },
+      }),
+      foundRow("a", {
+        created_at: "2026-11-01T10:00:00Z",
+        sentence: "They approved it.",
+        book: { title: "Middlemarch" },
+        ai_content: { ...aiContent, chosenMeaning: { partOfSpeech: "noun", definition: "An approval." } },
+      }),
+    ]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    const page = screen.getByRole("article");
+    expect(within(page).getByText("They approved it.")).toBeVisible();
+    expect(within(page).getByText("It punished them.")).toBeVisible();
+    expect(within(page).getByText("Beloved")).toBeVisible();
+    expect(within(page).getByText("Middlemarch")).toBeVisible();
+    const help = within(page).getByRole("region", { name: "Written by AI" });
+    expect(within(help).getByText("In your sentences, it means")).toBeVisible();
+    expect(within(help).getByText(/A penalty\./)).toBeVisible();
+    expect(within(help).getByText(/An approval\./)).toBeVisible();
+    expect(mocked.explainWord).not.toHaveBeenCalled();
+  });
+
+  it("fills in the meaning for an older repeat's sentence when opened", async () => {
+    mocked.listWords.mockResolvedValue([
+      foundRow("b", { created_at: "2026-11-02T10:00:00Z", sentence: "An older repeat.", ai_content: null }),
+      foundRow("a", { created_at: "2026-11-01T10:00:00Z" }),
+    ]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    await waitFor(() => expect(mocked.explainWord).toHaveBeenCalledWith("sanction", "An older repeat.", definitions));
+    expect(mocked.explainWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("corrects every save of a typo together, so it doesn't split apart", async () => {
+    const typo = (id: string, created_at: string) => ({
+      ...entry("ephemral"),
+      id,
+      created_at,
+      definition_status: "not_found" as const,
+      spelling_suggestions: ["ephemeral"],
+    });
+    mocked.listWords.mockResolvedValue([typo("b", "2026-11-02T10:00:00Z"), typo("a", "2026-11-01T10:00:00Z")]);
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "ephemeral" }));
+
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("a", "found", definitions, "ephemeral", null));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("b", "found", definitions, "ephemeral", null));
+    expect(await screen.findByLabelText("1 word saved")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "ephemeral" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "ephemral" })).not.toBeInTheDocument();
+  });
+
+  it("stays on the word's page when a typo with repeats is corrected there", async () => {
+    const typo = { ...entry("ephemral"), definition_status: "not_found" as const, spelling_suggestions: ["ephemeral"] };
+    mocked.listWords.mockResolvedValue([typo]);
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "ephemral" }));
+    await user.click(within(screen.getByRole("article")).getByRole("button", { name: "ephemeral" }));
+    expect(await screen.findByRole("heading", { name: "ephemeral" })).toBeVisible();
+  });
+
+  it("keeps one entry when a repeat can't copy the saved details, and doesn't retry endlessly", async () => {
+    mocked.listWords.mockResolvedValue([foundRow("a", { created_at: "2026-11-01T10:00:00Z" })]);
+    mocked.addWord.mockResolvedValue({ ...entry("sanction"), id: "b" });
+    mocked.saveDefinitions.mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    render(<App />);
+    await saveRepeat(user);
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledTimes(1));
+    expect(screen.getAllByRole("button", { name: "sanction" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "sanction" }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(mocked.saveDefinitions).toHaveBeenCalledTimes(1);
+  });
+
+  it("copies the saved details to a repeat left without them, when the word is opened", async () => {
+    mocked.listWords.mockResolvedValue([
+      { ...entry("sanction", undefined, "A stranded line."), id: "b", created_at: "2026-11-02T10:00:00Z" },
+      foundRow("a", { created_at: "2026-11-01T10:00:00Z" }),
+    ]);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith("b", "found", definitions, null, null));
+    await waitFor(() => expect(mocked.explainWord).toHaveBeenCalledWith("sanction", "A stranded line.", definitions));
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+    expect(mocked.saveDefinitions).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("when AI is unavailable", () => {
   const withExamples = {
     source: "Wiktionary",

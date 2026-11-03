@@ -14,27 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F10: Merge a repeated word into one entry
-
-- **Depends on:** F04
-- **Requirements:** W6
-- **Story:** As the reader, when I save a word again, its new sentence joins the existing entry.
-- **Screen:** Several sentences on one word's page
-- **Server:** Save checks for an existing word per user
-- **Data:** Word has a list of sentences, each with its book
-
-**Test steps**
-
-- [ ] Save a word with a sentence from one book.
-- [ ] Switch book and save the same word with a new sentence.
-- [ ] Check your word list and the word's page.
-
-**Passes if:** The word appears once, showing both sentences and their books.
-
-**Effectiveness check:** No duplicate words appear after 5 repeated saves.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F11: Save without signal and sync later
 
 - **Depends on:** F03, F05
@@ -227,6 +206,29 @@ None yet.
 None yet.
 
 ## Done
+
+### F10: Merge a repeated word into one entry
+
+- **Depends on:** F04
+- **Requirements:** W6
+- **Story:** As the reader, when I save a word again, its new sentence joins the existing entry.
+- **Screen:** One list entry per word, with several sentences on its page
+- **Server:** Reuses saved definitions for a repeat, and asks AI only about the new sentence
+- **Data:** Each save stays as its own row, grouped by base word when shown, so nothing is deleted. Bringing a repeat into review sooner is left for F12.
+
+**Test steps**
+
+- [x] Save a word with a sentence from one book.
+- [x] Switch book and save the same word with a new sentence.
+- [x] Check your word list and the word's page.
+
+**Passes if:** The word appears once, showing both sentences and their books.
+
+**Effectiveness check:** No duplicate words appear after 5 repeated saves.
+
+**Build progress:** Live, with all 226 automated tests passing, and the flow works in a browser against the fake local server.
+
+**Test record:** Date: 2026-11-03 | Result: Passed on iPhone | Effectiveness: Passed, no duplicates after 5 repeated saves | Issues: None
 
 ### F09: Fall back to the dictionary when AI is unavailable
 

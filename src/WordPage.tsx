@@ -3,10 +3,14 @@ import type { SavedWord } from "./lib/api";
 import { playWord } from "./lib/speak";
 import { savedOn } from "./lib/dates";
 import { dictionaryExamples, type Meaning } from "./lib/definitions";
+import type { Reading } from "./lib/groups";
 import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 
 type WordPageProps = {
   word: SavedWord;
+  bookTitles: string[];
+  typedForms: string[];
+  readings: Reading[];
   lookupFailed: boolean;
   aiFailed: boolean;
   onRetryAi: () => void;
@@ -44,7 +48,39 @@ function Pronounce({ word }: { word: SavedWord }) {
   );
 }
 
-function AiHelp({ word, aiFailed, onRetryAi }: { word: SavedWord; aiFailed: boolean; onRetryAi: () => void }) {
+function ChosenMeanings({ readings, fallback }: { readings: Reading[]; fallback: Reading["chosenMeaning"] }) {
+  if (readings.length > 1) {
+    const chosen = readings.filter((reading) => reading.chosenMeaning);
+    if (chosen.length === 0) return null;
+    return (
+      <div>
+        <h3 className="ai-heading">In your sentences, it means</h3>
+        <ul className="ai-readings">
+          {chosen.map((reading) => (
+            <li key={reading.id}>
+              <span className="ai-quote">“{reading.sentence}”</span>
+              <span className="ai-meaning">
+                <em>{reading.chosenMeaning?.partOfSpeech}.</em> {reading.chosenMeaning?.definition}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  const meaning = readings[0]?.chosenMeaning ?? fallback;
+  if (!meaning) return null;
+  return (
+    <div>
+      <h3 className="ai-heading">In your sentence, it means</h3>
+      <p className="ai-meaning">
+        <em>{meaning.partOfSpeech}.</em> {meaning.definition}
+      </p>
+    </div>
+  );
+}
+
+function AiHelp({ word, readings, aiFailed, onRetryAi }: { word: SavedWord; readings: Reading[]; aiFailed: boolean; onRetryAi: () => void }) {
   const content = word.ai_content;
   if (!content && !aiFailed) return <p className="empty" role="status">Writing examples…</p>;
   if (!content) {
@@ -72,14 +108,7 @@ function AiHelp({ word, aiFailed, onRetryAi }: { word: SavedWord; aiFailed: bool
   return (
     <section className="ai-help" aria-label="Written by AI">
       <p className="ai-label">Written by AI, so check it against the definitions</p>
-      {content.chosenMeaning && (
-        <div>
-          <h3 className="ai-heading">In your sentence, it means</h3>
-          <p className="ai-meaning">
-            <em>{content.chosenMeaning.partOfSpeech}.</em> {content.chosenMeaning.definition}
-          </p>
-        </div>
-      )}
+      <ChosenMeanings readings={readings} fallback={content.chosenMeaning} />
       <div>
         <h3 className="ai-heading">3 examples</h3>
         <ol>
@@ -112,7 +141,7 @@ function MeaningList({ meanings }: { meanings: Meaning[] }) {
   );
 }
 
-function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<WordPageProps, "onBack" | "aiFailed" | "onRetryAi">) {
+function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Pick<WordPageProps, "word" | "lookupFailed" | "onRetry" | "onChoose" | "onKeep">) {
   if (word.definition_status === "found" && word.definitions) {
     const { meanings, typedMeanings, source, sourceUrl } = word.definitions;
     return (
@@ -149,27 +178,32 @@ function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Omit<Wor
   return <p className="empty" role="status">Looking up this word…</p>;
 }
 
-export function WordPage({ word, lookupFailed, aiFailed, onRetryAi, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
+export function WordPage({ word, bookTitles, typedForms, readings, lookupFailed, aiFailed, onRetryAi, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
   return (
     <article className="word-page">
       <button type="button" className="quiet" onClick={onBack}>Back to words</button>
       <h2 className="word-page-title">{word.base_form ?? word.word}</h2>
       <Pronounce key={word.id} word={word} />
-      {word.base_form && <p className="source">You typed {word.word}</p>}
+      {typedForms.length > 0 && <p className="source">You typed {typedForms.join(", ")}</p>}
       <p className="source">
-        {word.book && (
+        {bookTitles.length > 0 && (
           <>
-            <cite>{word.book.title}</cite>,{" "}
+            <cite>{bookTitles.join(", ")}</cite>,{" "}
           </>
         )}
-        saved <time dateTime={word.created_at}>{savedOn.format(new Date(word.created_at))}</time>
+        first saved <time dateTime={word.created_at}>{savedOn.format(new Date(word.created_at))}</time>
       </p>
-      {word.sentence ? (
-        <blockquote className="word-sentence">{word.sentence}</blockquote>
+      {readings.length > 0 ? (
+        readings.map((reading) => (
+          <figure className="word-reading" key={reading.id}>
+            <blockquote className="word-sentence">{reading.sentence}</blockquote>
+            {bookTitles.length > 1 && reading.bookTitle && <figcaption><cite className="source">{reading.bookTitle}</cite></figcaption>}
+          </figure>
+        ))
       ) : (
         <p className="empty">No book sentence saved with this word.</p>
       )}
-      {word.definition_status === "found" && <AiHelp word={word} aiFailed={aiFailed} onRetryAi={onRetryAi} />}
+      {word.definition_status === "found" && <AiHelp word={word} readings={readings} aiFailed={aiFailed} onRetryAi={onRetryAi} />}
       <Definitions word={word} lookupFailed={lookupFailed} onRetry={onRetry} onChoose={onChoose} onKeep={onKeep} />
     </article>
   );

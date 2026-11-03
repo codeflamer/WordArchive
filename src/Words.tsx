@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   addWord,
   defineWord,
@@ -14,6 +14,7 @@ import {
 } from "./lib/api";
 import { cacheWords, readCachedWords } from "./lib/cache";
 import { savedOn } from "./lib/dates";
+import { groupWords } from "./lib/groups";
 import { checkWord } from "./lib/word";
 import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 import { WordPage } from "./WordPage";
@@ -35,7 +36,10 @@ export function Words({ book }: { book: Book | null | undefined }) {
   const lookingUp = useRef(new Set<string>());
   const explaining = useRef(new Set<string>());
 
-  const openWord = words?.find((entry) => entry.id === openId);
+  const groups = useMemo(() => groupWords(words ?? []), [words]);
+  // Found by row, so the page stays open when a chosen spelling changes which group the word belongs to.
+  const openGroup = groups.find((group) => group.rows.some((row) => row.id === openId));
+  const openWord = openGroup?.word;
 
   useEffect(() => {
     let current = true;
@@ -80,7 +84,8 @@ export function Words({ book }: { book: Book | null | undefined }) {
   }, []);
 
   // A chosen spelling is stored like a base form, so "ephemeral" shows with "You typed ephemral".
-  const lookUp = useCallback(async (entry: SavedWord, chosenSpelling?: string) => {
+  // Other saves of the same word change with it, or a corrected typo would split back into two entries.
+  const lookUp = useCallback(async (entry: SavedWord, chosenSpelling?: string, others: SavedWord[] = []) => {
     if (lookingUp.current.has(entry.id)) return;
     lookingUp.current.add(entry.id);
     setFailedLookups((failed) => {
@@ -104,10 +109,44 @@ export function Words({ book }: { book: Book | null | undefined }) {
         ),
       );
       if (result.status === "found") void explain({ ...entry, definitions, base_form: baseForm });
+      const saved = await Promise.allSettled(others.map((other) => saveDefinitions(other.id, result.status, definitions, baseForm, suggestions)));
+      const updated = new Set(others.filter((_, index) => saved.at(index)?.status === "fulfilled").map((other) => other.id));
+      setWords((list) =>
+        (list ?? []).map((item) =>
+          updated.has(item.id)
+            ? { ...item, definitions, definition_status: result.status, base_form: baseForm, spelling_suggestions: suggestions }
+            : item,
+        ),
+      );
+      if (result.status === "found") {
+        for (const other of others) {
+          if (other.sentence && updated.has(other.id)) void explain({ ...other, definitions, base_form: baseForm });
+        }
+      }
     } catch {
       setFailedLookups((failed) => new Set(failed).add(entry.id));
     } finally {
       lookingUp.current.delete(entry.id);
+    }
+  }, [explain]);
+
+  // A repeat reuses what's already saved, so only a new sentence needs AI.
+  const reuse = useCallback(async (entry: SavedWord, source: SavedWord) => {
+    try {
+      const status = source.definition_status ?? "not_found";
+      const baseForm = source.base_form ?? null;
+      const suggestions = source.spelling_suggestions ?? null;
+      await saveDefinitions(entry.id, status, source.definitions, baseForm, suggestions);
+      setWords((list) =>
+        (list ?? []).map((item) =>
+          item.id === entry.id
+            ? { ...item, definitions: source.definitions, definition_status: status, base_form: baseForm, spelling_suggestions: suggestions }
+            : item,
+        ),
+      );
+      if (status === "found" && entry.sentence) void explain({ ...entry, definitions: source.definitions, base_form: baseForm });
+    } catch {
+      setFailedLookups((failed) => new Set(failed).add(entry.id));
     }
   }, [explain]);
 
@@ -142,6 +181,28 @@ export function Words({ book }: { book: Book | null | undefined }) {
     if (needsAi && openWord) void explain(openWord);
   }, [needsAi, openWord, explain]);
 
+  // A repeat whose copy of the saved details failed picks them up when the word is next opened.
+  const repeatsNeedingDetails = openGroup && openWord?.definition_status
+    ? openGroup.rows.filter((row) => row.definition_status === null && !failedLookups.has(row.id))
+    : [];
+  const repeatIds = repeatsNeedingDetails.map((row) => row.id).join(" ");
+  useEffect(() => {
+    if (repeatIds && openWord) repeatsNeedingDetails.forEach((row) => void reuse(row, openWord));
+    // Runs when the list of rows changes, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repeatIds, reuse]);
+
+  // Each sentence gets its own meaning, as one word can mean different things in different books.
+  const sentencesNeedingAi = (openGroup?.rows ?? []).filter(
+    (row) => row.definition_status === "found" && row.sentence && !row.ai_content && !aiTried.has(row.id),
+  );
+  const sentenceIds = sentencesNeedingAi.map((row) => row.id).join(" ");
+  useEffect(() => {
+    if (sentenceIds) sentencesNeedingAi.forEach((row) => void explain(row));
+    // Runs when the list of rows changes, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentenceIds, explain]);
+
   // Fetched on opening, so a recording is ready when play is tapped. A failure just leaves the phone's own voice.
   const needsPronunciation =
     openWord !== undefined && openWord.definition_status === "found" && !openWord.pronunciation && !pronunciationTried.has(openWord.id);
@@ -174,12 +235,18 @@ export function Words({ book }: { book: Book | null | undefined }) {
     setBusy(true);
     setError("");
     try {
+      const existing = groups.find((group) => group.key === check.word || group.rows.some((row) => row.word === check.word));
       const word = await addWord(check.word, book?.id ?? null, sentence.trim() || null);
       setWords((list) => [word, ...(list ?? [])]);
       setDraft("");
       setSentence("");
-      setSaved(`Saved ${word.word}`);
-      void lookUp(word);
+      if (existing && existing.word.definition_status !== null) {
+        setSaved(`Added to ${existing.key}`);
+        void reuse(word, existing.word);
+      } else {
+        setSaved(`Saved ${word.word}`);
+        void lookUp(word);
+      }
     } catch {
       setError("The word wasn't saved. Check your connection and try again.");
     } finally {
@@ -191,19 +258,22 @@ export function Words({ book }: { book: Book | null | undefined }) {
   return (
     <>
       {words && (
-        <div className="ribbon" aria-label={`${words.length} ${words.length === 1 ? "word" : "words"} saved`}>
-          {words.length}
+        <div className="ribbon" aria-label={`${groups.length} ${groups.length === 1 ? "word" : "words"} saved`}>
+          {groups.length}
         </div>
       )}
 
-      {openWord && (
+      {openGroup && openWord && (
         <WordPage
           word={openWord}
+          bookTitles={openGroup.bookTitles}
+          typedForms={openGroup.typedForms}
+          readings={openGroup.readings}
           lookupFailed={failedLookups.has(openWord.id)}
           aiFailed={aiFailed.has(openWord.id)}
           onRetryAi={() => void explain(openWord)}
           onRetry={() => void lookUp(openWord)}
-          onChoose={(suggestion) => void lookUp(openWord, suggestion)}
+          onChoose={(suggestion) => void lookUp(openWord, suggestion, openGroup.rows.filter((row) => row.id !== openWord.id))}
           onKeep={() => void keep(openWord)}
           onBack={() => setOpenId(null)}
         />
@@ -242,27 +312,27 @@ export function Words({ book }: { book: Book | null | undefined }) {
         {notice && <p className="saved">{notice}</p>}
 
         {words?.length === 0 && <p className="empty">Your words will appear here. Save the first one you meet in your book.</p>}
-        {words && words.length > 0 && (
+        {groups.length > 0 && (
           <ol className="entries">
-            {words.map((entry) => (
-              <li key={entry.id}>
+            {groups.map(({ key, word: entry, rows, bookTitles, typedForms, latest }) => (
+              <li key={key}>
                 <button type="button" className="headword" onClick={() => setOpenId(entry.id)}>
-                  {entry.base_form ?? entry.word}
+                  {key}
                 </button>
-                <time dateTime={entry.created_at}>{savedOn.format(new Date(entry.created_at))}</time>
-                {entry.base_form && <span className="source">You typed {entry.word}</span>}
+                <time dateTime={latest}>{savedOn.format(new Date(latest))}</time>
+                {typedForms.length > 0 && <span className="source">You typed {typedForms.join(", ")}</span>}
                 {entry.definition_status === "not_found" && (
                   <span className="word-flag">{entry.kept_as_typed ? "Not in the dictionary" : "Check this word"}</span>
                 )}
                 {entry.definition_status === "found" && !entry.ai_content && (aiFailed.has(entry.id) || !aiTried.has(entry.id)) && (
                   <span className="word-flag">Incomplete</span>
                 )}
-                {entry.book && <cite className="source">{entry.book.title}</cite>}
+                {bookTitles.length > 0 && <cite className="source">{bookTitles.join(", ")}</cite>}
                 {needsSpellingCheck(entry) && (
                   <SpellingCheck
                     word={entry}
                     failed={failedLookups.has(entry.id)}
-                    onChoose={(suggestion) => void lookUp(entry, suggestion)}
+                    onChoose={(suggestion) => void lookUp(entry, suggestion, rows.filter((row) => row.id !== entry.id))}
                     onKeep={() => void keep(entry)}
                   />
                 )}
