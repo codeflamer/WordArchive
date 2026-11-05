@@ -35,6 +35,10 @@ The effectiveness targets below are proposed and can be changed.
 
 **Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
 
+## In progress
+
+## Testing
+
 ### F17: Export everything to a file
 
 - **Depends on:** F03, F05
@@ -46,19 +50,17 @@ The effectiveness targets below are proposed and can be changed.
 
 **Test steps**
 
-- [ ] Tap Export and save the file.
-- [ ] Open it and compare the counts with the app.
-- [ ] Claude runs an automated test that restores the file into an empty test account.
+- [x] Tap Export and save the file.
+- [x] Open it and compare the counts with the app.
+- [x] Claude runs an automated test that restores the file into an empty test account.
 
 **Passes if:** Every entry is in the file, and the file restores into an empty test account.
 
 **Effectiveness check:** Export takes one tap, and the file is readable outside the app.
 
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
+**Build progress:** Live, with all 332 automated tests passing. On a real Postgres engine, an export holds only its own account's data, and restoring it into an empty account in a fresh database gives back an identical file. The file is plain JSON named by date, and it includes entries still waiting to sync. It saves through the iPhone share sheet. If the phone asks for another tap, a Save the file button appears. Not tried in a browser, because the preview tool only runs the main folder.
 
-## In progress
-
-## Testing
+**Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not recorded yet, note whether it took one tap and the file read clearly in Files | Issues: None
 
 ### F16: Search words and quotes
 

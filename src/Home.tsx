@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Books } from "./Books";
+import { Export } from "./Export";
 import { getCurrentBook, getLastChecked, signOut, type Book } from "./lib/api";
 import { cacheBook, readCachedBook } from "./lib/cache";
 import { savedOn } from "./lib/dates";
@@ -108,6 +109,7 @@ export function Home() {
         {/* Also opens fresh, so new saves are searchable straight away. */}
         {section === "search" && <Search />}
 
+        <Export />
         <button className="quiet leave" onClick={leave}>Sign out</button>
         {lastChecked && <p className="last-checked">Database last checked {savedOn.format(new Date(lastChecked))}</p>}
       </main>

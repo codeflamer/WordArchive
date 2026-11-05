@@ -245,6 +245,24 @@ button:focus-visible {
   margin-top: 2rem;
 }
 
+.export {
+  margin-top: 2rem;
+}
+
+.export + .leave {
+  margin-top: 0.75rem;
+}
+
+.export-status {
+  margin: 0.25rem 0 0;
+  color: var(--faded);
+  font-size: 0.9375rem;
+}
+
+.export-status:empty {
+  display: none;
+}
+
 .definitions {
   display: grid;
   gap: 1rem;

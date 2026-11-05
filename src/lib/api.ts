@@ -1,6 +1,7 @@
 import { createClient, isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
 import type { Card } from "ts-fsrs";
 import type { AiContent, Definitions, LookupResult, Pronunciation } from "./definitions";
+import { EXPORT_TABLES, type ExportTable, type Row } from "./exportData";
 import type { WordReview } from "./review";
 
 export type Book = { id: string; title: string; author: string };
@@ -50,6 +51,22 @@ const supabase = isConfigured ? createClient(url!, key!) : null;
 function client() {
   if (!supabase) throw new Error("Supabase is not configured");
   return supabase;
+}
+
+const EXPORT_PAGE = 1000;
+
+// Reads every row of one of the reader's tables, page by page, as the server returns at most 1,000 rows at once.
+// The access rules mean it only ever returns the signed-in reader's own rows.
+export async function exportRows(table: ExportTable): Promise<Row[]> {
+  const rows: Row[] = [];
+  for (let from = 0; ; from += EXPORT_PAGE) {
+    let query = client().from(table).select("*");
+    for (const column of EXPORT_TABLES[table]) query = query.order(column, { ascending: true });
+    const { data, error } = await query.range(from, from + EXPORT_PAGE - 1);
+    if (error) throw error;
+    rows.push(...(data as Row[]));
+    if (data.length < EXPORT_PAGE) return rows;
+  }
 }
 
 export async function getSession(): Promise<Session | null> {

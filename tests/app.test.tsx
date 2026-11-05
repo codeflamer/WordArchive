@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import * as api from "../src/lib/api";
 import { playWord } from "../src/lib/speak";
+import { saveFile } from "../src/lib/saveFile";
 
 vi.mock("../src/lib/api", () => ({
   isConfigured: true,
@@ -32,9 +33,11 @@ vi.mock("../src/lib/api", () => ({
   getReview: vi.fn(),
   recordReview: vi.fn(),
   getQuoteOfTheDay: vi.fn(),
+  exportRows: vi.fn(),
 }));
 
 vi.mock("../src/lib/speak", () => ({ playWord: vi.fn() }));
+vi.mock("../src/lib/saveFile", () => ({ saveFile: vi.fn() }));
 
 const mocked = vi.mocked(api);
 const session = { access_token: "token" } as Awaited<ReturnType<typeof api.getSession>>;
@@ -77,6 +80,64 @@ beforeEach(() => {
   mocked.getReview.mockResolvedValue(null);
   mocked.recordReview.mockResolvedValue();
   mocked.getQuoteOfTheDay.mockResolvedValue(null);
+  mocked.exportRows.mockResolvedValue([]);
+  vi.mocked(saveFile).mockResolvedValue("shared");
+});
+
+describe("exporting everything", () => {
+  const tables: Record<string, Record<string, unknown>[]> = {
+    books: [{ id: "b1", title: "Middlemarch", author: "George Eliot", user_id: "me" }],
+    words: [
+      { id: "w1", word: "mitigated", base_form: "mitigate", user_id: "me" },
+      { id: "w2", word: "mitigate", base_form: null, user_id: "me" },
+    ],
+    quotes: [{ id: "q1", body: "A line.", user_id: "me" }],
+    word_reviews: [],
+    word_review_log: [{ id: "r1", word_key: "mitigate", rating: 3 }],
+    reader_settings: [],
+  };
+
+  async function signedIn() {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+    mocked.exportRows.mockImplementation(async (table) => tables[table]);
+    const user = userEvent.setup();
+    render(<App />);
+    return { user, button: await screen.findByRole("button", { name: "Export my data" }) };
+  }
+
+  it("saves everything to a dated file in one tap, and reports the counts", async () => {
+    const { user, button } = await signedIn();
+    await user.click(button);
+    expect(await screen.findByText("Exported 1 word, 1 quote, 1 book, 1 review.")).toBeInTheDocument();
+    expect(mocked.exportRows).toHaveBeenCalledTimes(6);
+    const [name, text] = vi.mocked(saveFile).mock.calls[0];
+    expect(name).toMatch(/^wordarchive-\d{4}-\d{2}-\d{2}\.json$/);
+    const file = JSON.parse(text);
+    expect(file.words).toHaveLength(2);
+    expect(file.counts).toMatchObject({ words: 1, wordSaves: 2, quotes: 1 });
+    expect(text).not.toContain('"user_id"');
+  });
+
+  it("asks for one more tap when the phone needs it", async () => {
+    vi.mocked(saveFile).mockResolvedValueOnce("needs-tap");
+    const { user, button } = await signedIn();
+    await user.click(button);
+    await user.click(await screen.findByRole("button", { name: "Save the file" }));
+    expect(await screen.findByText("Exported 1 word, 1 quote, 1 book, 1 review.")).toBeInTheDocument();
+    expect(vi.mocked(saveFile).mock.calls[1]).toEqual(vi.mocked(saveFile).mock.calls[0]);
+    expect(mocked.exportRows).toHaveBeenCalledTimes(6);
+  });
+
+  it("says so when the file isn't saved, or can't be made", async () => {
+    vi.mocked(saveFile).mockResolvedValueOnce("cancelled");
+    const { user, button } = await signedIn();
+    await user.click(button);
+    expect(await screen.findByText("The file wasn't saved. Tap Export my data to try again.")).toBeInTheDocument();
+    mocked.exportRows.mockRejectedValue(new Error("offline"));
+    await user.click(screen.getByRole("button", { name: "Export my data" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your data wasn't exported.");
+  });
 });
 
 describe("quote of the day", () => {
