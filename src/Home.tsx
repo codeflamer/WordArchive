@@ -4,7 +4,9 @@ import { Export } from "./Export";
 import { getCurrentBook, getLastChecked, signOut, type Book } from "./lib/api";
 import { cacheBook, readCachedBook } from "./lib/cache";
 import { savedOn } from "./lib/dates";
+import { opensReview, REVIEW_PATH } from "./lib/link";
 import { Quotes } from "./Quotes";
+import { ReminderLink } from "./ReminderLink";
 import { Review } from "./Review";
 import { Search } from "./Search";
 import { Words } from "./Words";
@@ -14,7 +16,8 @@ type Section = "words" | "quotes" | "review" | "search";
 export function Home() {
   const [book, setBook] = useState<Book | null | undefined>(readCachedBook);
   const [choosingBook, setChoosingBook] = useState(false);
-  const [section, setSection] = useState<Section>("words");
+  // The daily reminder's link lands straight on the review.
+  const [section, setSection] = useState<Section>(() => (opensReview(window.location.pathname) ? "review" : "words"));
   const [error, setError] = useState("");
   const [lastChecked, setLastChecked] = useState<string | null>(null);
 
@@ -40,6 +43,12 @@ export function Home() {
   useEffect(() => {
     if (book !== undefined) cacheBook(book);
   }, [book]);
+
+  // Keeps the address in step with the tab, so reopening after leaving the review starts on the words.
+  useEffect(() => {
+    const path = section === "review" ? REVIEW_PATH : "/";
+    if (window.location.pathname !== path) window.history.replaceState(null, "", path);
+  }, [section]);
 
   async function leave() {
     setError("");
@@ -105,7 +114,12 @@ export function Home() {
           <Quotes book={book} />
         </div>
         {/* Opens fresh each time, so it includes words saved since the last visit. */}
-        {section === "review" && <Review />}
+        {section === "review" && (
+          <>
+            <Review />
+            <ReminderLink />
+          </>
+        )}
         {/* Also opens fresh, so new saves are searchable straight away. */}
         {section === "search" && <Search />}
 

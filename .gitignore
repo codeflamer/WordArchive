@@ -4,3 +4,4 @@ dev-dist
 .env.local
 .wrangler
 PROMT.md
+*.tsbuildinfo

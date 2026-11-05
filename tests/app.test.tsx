@@ -691,6 +691,78 @@ describe("searching", () => {
   });
 });
 
+describe("the daily reminder link", () => {
+  const due = { ...entry("sanction", "Middlemarch", "The sanction was lifted."), definitions, definition_status: "found" as const };
+
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/review");
+    mocked.listWords.mockResolvedValue([due]);
+  });
+
+  it("opens straight on today's review", async () => {
+    mocked.getSession.mockResolvedValue(session);
+    render(<App />);
+    expect(await screen.findByRole("article", { name: "Review card" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("asks a signed-out reader to sign in, then opens the review", async () => {
+    mocked.getSession.mockResolvedValue(null);
+    let changed: (value: typeof session) => void = () => {};
+    mocked.onSessionChange.mockImplementation((callback) => {
+      changed = callback as typeof changed;
+      return () => {};
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await screen.findByLabelText("Email"), "reader@example.test");
+    await user.type(screen.getByLabelText("Password"), "test-password");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    act(() => changed(session));
+    expect(await screen.findByRole("article", { name: "Review card" })).toBeInTheDocument();
+  });
+
+  it("goes back to the plain address when another tab is chosen", async () => {
+    mocked.getSession.mockResolvedValue(session);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Words" }));
+    expect(window.location.pathname).toBe("/");
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    expect(window.location.pathname).toBe("/review");
+  });
+
+  it("opens the words as usual from the plain address", async () => {
+    window.history.replaceState(null, "", "/");
+    mocked.getSession.mockResolvedValue(session);
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Words" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("article", { name: "Review card" })).not.toBeInTheDocument();
+  });
+
+  it("shows the link and copies it for a reminder", async () => {
+    mocked.getSession.mockResolvedValue(session);
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    render(<App />);
+    const reminder = await screen.findByRole("region", { name: "Daily reminder" });
+    expect(within(reminder).getByText(`${window.location.origin}/review`)).toBeInTheDocument();
+    await user.click(within(reminder).getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/review`);
+    expect(await within(reminder).findByText("Link copied.")).toBeInTheDocument();
+  });
+
+  it("explains when the link can't be copied", async () => {
+    mocked.getSession.mockResolvedValue(session);
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("blocked"));
+    render(<App />);
+    const reminder = await screen.findByRole("region", { name: "Daily reminder" });
+    await user.click(within(reminder).getByRole("button", { name: "Copy link" }));
+    expect(await within(reminder).findByText(/couldn't be copied/)).toBeInTheDocument();
+  });
+});
+
 describe("the database status line", () => {
   beforeEach(() => {
     mocked.getSession.mockResolvedValue(session);

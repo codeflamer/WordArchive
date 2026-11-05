@@ -21,6 +21,19 @@ A card can't move to Done until its full test is run again and passes.
 
 ## Resolved
 
+### ISS-013: Tests opened on the review after another test chose it
+
+- **Card:** F15
+- **Found:** 2026-11-05
+- **Severity:** Minor
+- **Steps to reproduce:**
+  1. Run all the tests after adding the review link.
+- **Expected:** All tests pass.
+- **Actual:** 16 word and definition tests failed, as they couldn't find the Words screen.
+- **Cause:** Choosing the Review tab now changes the address to /review. The test browser kept that address into later tests, so they opened on the review.
+- **Fix:** The address goes back to / after every test, except in tests that run without a browser.
+- **Retest:** 2026-11-05. All 341 tests pass, three runs in a row.
+
 ### ISS-012: Search without signal missed entries added since the app opened
 
 - **Card:** F16

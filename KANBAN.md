@@ -14,30 +14,30 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
+## In progress
+
+## Testing
+
 ### F15: Open today's review from a daily reminder
 
 - **Depends on:** F12
 - **Requirements:** Daily reminder in the PRD
 - **Story:** As the reader, a recurring iPhone reminder takes me straight to today's review.
-- **Screen:** A direct link that opens the review session
-- **Server:** Link is served by Cloudflare and checks sign-in
+- **Screen:** A direct link that opens the review session, shown with a Copy button and setup steps under the review
+- **Server:** Cloudflare serves the app at /review, and the app checks sign-in before opening the review. The link opens in Safari, which keeps its own sign-in
 - **Data:** Reads the due words
 
 **Test steps**
 
-- [ ] Create a recurring iPhone reminder using the link from the app.
-- [ ] Wait for it to fire, then tap it and open the link.
-- [ ] Check what opens.
+- [x] Create a recurring iPhone reminder using the link from the app.
+- [x] Wait for it to fire, then tap it and open the link.
+- [x] Check what opens.
 
 **Passes if:** The link opens today's review, signed in, without going through other screens.
 
 **Effectiveness check:** Record how many days out of 14 you complete a review. Use this to decide whether web notifications are needed.
 
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
-## In progress
-
-## Testing
+**Test record:** Date: 2026-11-05 | Result: Passed on the iPhone, with 341 automated tests passing | Effectiveness: Counting review days from 2026-11-05 to 2026-11-19 | Issues: ISS-013
 
 ### F17: Export everything to a file
 
@@ -61,29 +61,6 @@ The effectiveness targets below are proposed and can be changed.
 **Build progress:** Live, with all 332 automated tests passing. On a real Postgres engine, an export holds only its own account's data, and restoring it into an empty account in a fresh database gives back an identical file. The file is plain JSON named by date, and it includes entries still waiting to sync. It saves through the iPhone share sheet. If the phone asks for another tap, a Save the file button appears. Not tried in a browser, because the preview tool only runs the main folder.
 
 **Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not recorded yet, note whether it took one tap and the file read clearly in Files | Issues: None
-
-### F16: Search words and quotes
-
-- **Depends on:** F03, F05
-- **Requirements:** D1
-- **Story:** As the reader, I search by text, book or author and find what I saved.
-- **Screen:** Search box and results
-- **Server:** None needed. The search runs on the phone over the reader's own saved entries, so it also works without signal
-- **Data:** Words, quotes and books already held by the app, with authors matched through the books list, or through quotes' books without signal
-
-**Test steps**
-
-- [x] Search for a saved word.
-- [x] Search for a phrase inside a quote.
-- [x] Search for a book title and an author.
-- [x] Search for something that doesn't exist.
-- [x] Search again without signal.
-
-**Passes if:** Each search finds the matching entries, and the empty search says nothing was found.
-
-**Effectiveness check:** You can find any quote you remember within 15 seconds.
-
-**Test record:** Date: 2026-11-05 | Result: Passed on the iPhone, with 323 automated tests passing | Effectiveness: Waiting for the 15-second check | Issues: ISS-012
 
 ### F14: Resurface one past quote each day
 
@@ -188,6 +165,29 @@ The effectiveness targets below are proposed and can be changed.
 **Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not measured yet, due after 2 weeks of use, around 2026-11-19 | Issues: None
 
 ## Done
+
+### F16: Search words and quotes
+
+- **Depends on:** F03, F05
+- **Requirements:** D1
+- **Story:** As the reader, I search by text, book or author and find what I saved.
+- **Screen:** Search box and results
+- **Server:** None needed. The search runs on the phone over the reader's own saved entries, so it also works without signal
+- **Data:** Words, quotes and books already held by the app, with authors matched through the books list, or through quotes' books without signal
+
+**Test steps**
+
+- [x] Search for a saved word.
+- [x] Search for a phrase inside a quote.
+- [x] Search for a book title and an author.
+- [x] Search for something that doesn't exist.
+- [x] Search again without signal.
+
+**Passes if:** Each search finds the matching entries, and the empty search says nothing was found.
+
+**Effectiveness check:** You can find any quote you remember within 15 seconds.
+
+**Test record:** Date: 2026-11-05 | Result: Passed on the iPhone, with 323 automated tests passing | Effectiveness: Met, a remembered quote was found in under 15 seconds | Issues: ISS-012
 
 ### F11: Save without signal and sync later
 

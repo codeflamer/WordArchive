@@ -747,3 +747,24 @@ textarea:focus {
   font-size: 0.9375rem;
   font-style: italic;
 }
+
+.reminder {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+}
+
+.reminder-link {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.reminder-steps {
+  margin-top: 1rem;
+  padding-left: 1.25rem;
+  color: var(--faded);
+  font-size: 0.95rem;
+}
