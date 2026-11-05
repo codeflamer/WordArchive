@@ -42,6 +42,13 @@ export function dueWords(groups: WordGroup[], reviews: WordReview[], now: Date):
     .sort((a, b) => new Date(a.card.due).getTime() - new Date(b.card.due).getTime());
 }
 
+export const SESSION_LIMIT = 10;
+
+// Words beyond the limit aren't touched, so they stay due and, being the most overdue, come first next time.
+export function splitSession(due: DueWord[]): { session: DueWord[]; later: DueWord[] } {
+  return { session: due.slice(0, SESSION_LIMIT), later: due.slice(SESSION_LIMIT) };
+}
+
 export function rate(card: StoredCard, grade: Grade, now: Date): Card {
   return scheduler.next(card, now, grade).card;
 }

@@ -14,27 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F13: Cap review sessions and carry the rest over
-
-- **Depends on:** F12
-- **Requirements:** R4
-- **Story:** As the reader, I never face more than about 10 words in a session, even after missing days.
-- **Screen:** Session progress and an end-of-session message
-- **Server:** Due words request is limited
-- **Data:** Words left over stay due
-
-**Test steps**
-
-- [ ] Claude sets up a test account with 25 due words.
-- [ ] Complete a session.
-- [ ] Start the next day's session, using a simulated date.
-
-**Passes if:** The session stops at the cap, and the remaining words appear in the next one.
-
-**Effectiveness check:** A session takes about 5 minutes or less.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F14: Resurface one past quote each day
 
 - **Depends on:** F03, F12
@@ -123,6 +102,33 @@ The effectiveness targets below are proposed and can be changed.
 
 ## In progress
 
+None yet.
+
+## Testing
+
+### F13: Cap review sessions and carry the rest over
+
+- **Depends on:** F12
+- **Requirements:** R4
+- **Story:** As the reader, I never face more than about 10 words in a session, even after missing days.
+- **Screen:** Session progress and an end-of-session message, with a choice to start the next session
+- **Server:** None needed, as words are grouped and capped on the phone
+- **Data:** Words left over are never touched, so they stay due
+
+**Test steps**
+
+- [x] Claude tests a session with 25 due words in a browser, using test data in that tab only, as new sign-ups are off.
+- [ ] Complete a session on your iPhone.
+- [x] Claude tests the next day's session, using a simulated date.
+
+**Passes if:** The session stops at the cap, and the remaining words appear in the next one.
+
+**Effectiveness check:** A session takes about 5 minutes or less.
+
+**Build progress:** Built, with all 292 automated tests passing. In a browser with 25 due words, the session stopped at 10 and the next session offered the rest. Pushed before its iPhone test at the owner's request on 2026-11-05, so the F14 session could continue. The iPhone test is still to do.
+
+**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
+
 ### F18: Keep the database awake and show its status
 
 - **Depends on:** F01
@@ -143,15 +149,9 @@ The effectiveness targets below are proposed and can be changed.
 
 **Effectiveness check:** No manual restores are needed during a month of use.
 
-**Build progress:** Built, with all 250 automated tests passing, and `011_keep_awake.sql` has run on the real database. Waiting for F12's iPhone test and push, so the deploy can include both.
+**Build progress:** Built, with all 280 automated tests passing after merging F12, and `011_keep_awake.sql` has run on the real database. Live together with F12. Pushed at the owner's request on 2026-11-05 before a scheduled run had been seen. Confirming a real run and the 8-day test are still to do.
 
 **Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
-## Testing
-
-None yet.
-
-## Done
 
 ### F12: Review due words with spaced repetition
 
@@ -183,6 +183,8 @@ None yet.
 **Build progress:** Built, with all 269 automated tests passing, and the flow works in a browser against the fake local server, including repeat saves and phone width. Live, and the new tables on the real database refuse signed-out access.
 
 **Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not measured yet, due after 2 weeks of use, around 2026-11-19 | Issues: None
+
+## Done
 
 ### F11: Save without signal and sync later
 

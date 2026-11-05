@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Rating, type Grade } from "ts-fsrs";
 import type { SavedWord } from "../src/lib/api";
 import { groupWords } from "../src/lib/groups";
-import { canReview, comesBackToday, dueWords, isDue, previewWaits, rate, splitOnWord, waitLabel, type StoredCard, type WordReview } from "../src/lib/review";
+import { canReview, comesBackToday, dueWords, isDue, previewWaits, rate, SESSION_LIMIT, splitOnWord, splitSession, waitLabel, type StoredCard, type WordReview } from "../src/lib/review";
 
 const definitions = { source: "Test", sourceUrl: "https://example.test", meanings: [] };
 const saved = (word: string, created_at = "2026-11-01T10:00:00Z", extra: Partial<SavedWord> = {}): SavedWord => ({
@@ -138,6 +138,58 @@ describe("which words are due", () => {
     const second = rateNew(Rating.Good, at("2026-11-02T12:00:00"));
     const list = dueWords(groupWords([saved("newer", "2026-10-30T10:00:00Z"), saved("older", "2026-10-30T10:00:00Z")]), [reviewOf("older", second), reviewOf("newer", first)], now);
     expect(list.map((due) => due.group.key)).toEqual(new Date(second.due) < new Date(first.due) ? ["older", "newer"] : ["newer", "older"]);
+  });
+});
+
+describe("capping a session", () => {
+  const names = (count: number) => Array.from({ length: count }, (_, index) => `word${String(index).padStart(2, "0")}`);
+  // Oldest first, so word00 is the most overdue.
+  const backlog = (count: number) =>
+    groupWords(names(count).map((word, index) => saved(word, new Date(Date.UTC(2026, 9, 1 + index)).toISOString())));
+  const now = at("2026-11-05T12:00:00");
+
+  it("takes the 10 most overdue words, and holds the rest", () => {
+    const { session, later } = splitSession(dueWords(backlog(25), [], now));
+    expect(session.map((due) => due.group.key)).toEqual(names(10));
+    expect(later.map((due) => due.group.key)).toEqual(names(25).slice(10));
+  });
+
+  it("uses the same limit of 10", () => {
+    expect(SESSION_LIMIT).toBe(10);
+  });
+
+  it("holds nothing back at or under the limit", () => {
+    expect(splitSession(dueWords(backlog(10), [], now)).later).toEqual([]);
+    expect(splitSession(dueWords(backlog(3), [], now)).session).toHaveLength(3);
+    expect(splitSession([])).toEqual({ session: [], later: [] });
+  });
+
+  it("works through a backlog in order, with no word twice or left out", () => {
+    let rest = dueWords(backlog(25), [], now);
+    const sessions: string[][] = [];
+    while (rest.length > 0) {
+      const { session, later } = splitSession(rest);
+      sessions.push(session.map((due) => due.group.key));
+      rest = later;
+    }
+    expect(sessions.map((session) => session.length)).toEqual([10, 10, 5]);
+    expect(sessions.flat()).toEqual(names(25));
+  });
+
+  it("offers the words left over first on the next day, after the reviewed ones have gone", () => {
+    const groups = backlog(25);
+    const { session } = splitSession(dueWords(groups, [], now));
+    const reviews = session.map((due) => reviewOf(due.group.key, stored(rate(due.card, Rating.Easy, now))));
+
+    const nextDay = splitSession(dueWords(groups, reviews, at("2026-11-06T09:00:00")));
+    expect(nextDay.session.map((due) => due.group.key)).toEqual(names(25).slice(10, 20));
+    expect(nextDay.later.map((due) => due.group.key)).toEqual(names(25).slice(20));
+  });
+
+  it("keeps a backlog after several missed days, and still shows only 10", () => {
+    const { session, later } = splitSession(dueWords(backlog(25), [], at("2026-11-20T09:00:00")));
+    expect(session).toHaveLength(10);
+    expect(later).toHaveLength(15);
   });
 });
 

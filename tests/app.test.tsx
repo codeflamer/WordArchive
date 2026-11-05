@@ -140,6 +140,70 @@ describe("reviewing due words", () => {
     expect(mocked.recordReview).toHaveBeenCalledTimes(3);
   });
 
+  describe("with more due than one session holds", () => {
+    const backlog = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        ...ready(`word${index}`),
+        created_at: new Date(Date.UTC(2026, 9, 1 + index)).toISOString(),
+      }));
+
+    async function rateCards(user: ReturnType<typeof userEvent.setup>, count: number, rating = /^Easy/) {
+      for (let done = 0; done < count; done += 1) {
+        await user.click(await screen.findByRole("button", { name: "Show meaning" }));
+        await user.click(screen.getByRole("button", { name: rating }));
+        await waitFor(() => expect(mocked.recordReview).toHaveBeenCalled());
+        await screen.findByText(/left in this session|Review finished/);
+      }
+    }
+
+    it("starts with the 10 most overdue words, and shows the session's progress", async () => {
+      await openReview(backlog(25));
+      expect(await screen.findByText("10 left in this session, 15 more for later")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "word0" })).toBeInTheDocument();
+    });
+
+    it("stops at 10, says how many wait, and only saved those 10", async () => {
+      const user = await openReview(backlog(25));
+      await rateCards(user, 10);
+      expect(await screen.findByText("Review finished. You went through 10 words. 15 more are due and will wait for your next session.")).toBeInTheDocument();
+      expect(screen.queryByRole("article", { name: "Review card" })).not.toBeInTheDocument();
+      expect(mocked.recordReview).toHaveBeenCalledTimes(10);
+      expect(mocked.recordReview.mock.calls.map((call) => call[0])).toEqual(Array.from({ length: 10 }, (_, index) => `word${index}`));
+    });
+
+    it("carries on with the next words only if asked", async () => {
+      const user = await openReview(backlog(12));
+      await rateCards(user, 10);
+      await screen.findByText(/2 more are due/);
+      await user.click(screen.getByRole("button", { name: "Review 2 more now" }));
+      expect(await screen.findByText("2 left in this session")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "word10" })).toBeInTheDocument();
+      await rateCards(user, 2);
+      expect(await screen.findByText("Review finished. You went through 2 words.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /more now/ })).not.toBeInTheDocument();
+      expect(mocked.recordReview).toHaveBeenCalledTimes(12);
+    });
+
+    it("offers at most 10 more at a time", async () => {
+      const user = await openReview(backlog(25));
+      await rateCards(user, 10);
+      await user.click(await screen.findByRole("button", { name: "Review 10 more now" }));
+      expect(await screen.findByText("10 left in this session, 5 more for later")).toBeInTheDocument();
+    });
+
+    it("repeats a forgotten word without pulling in another from later", async () => {
+      const user = await openReview(backlog(11));
+      await rateCards(user, 1, /^Forgot/);
+      expect(await screen.findByText("10 left in this session, 1 more for later")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "word1" })).toBeInTheDocument();
+    });
+
+    it("says nothing about later when everything fits", async () => {
+      await openReview(backlog(10));
+      expect(await screen.findByText("10 left in this session")).toBeInTheDocument();
+    });
+  });
+
   it("leaves out words with no definition, and says when nothing is due", async () => {
     await openReview([ready("unknown", null, { definitions: null, definition_status: "not_found", kept_as_typed: true })]);
     expect(await screen.findByText("No words are due. Words you save will appear here.")).toBeInTheDocument();

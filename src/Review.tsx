@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Grade } from "ts-fsrs";
 import { listReviews, listWords, recordReview } from "./lib/api";
 import { groupWords } from "./lib/groups";
-import { comesBackToday, dueWords, previewWaits, rate, RATINGS, splitOnWord, type DueWord } from "./lib/review";
+import { comesBackToday, dueWords, previewWaits, rate, RATINGS, SESSION_LIMIT, splitOnWord, splitSession, type DueWord } from "./lib/review";
 import { MeaningList } from "./WordPage";
 
 function Sentence({ text, forms }: { text: string; forms: string[] }) {
@@ -41,6 +41,7 @@ function Answer({ due }: { due: DueWord }) {
 
 export function Review() {
   const [queue, setQueue] = useState<DueWord[] | null>(null);
+  const [later, setLater] = useState<DueWord[]>([]);
   const [flipped, setFlipped] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reviewed, setReviewed] = useState<ReadonlySet<string>>(new Set());
@@ -51,7 +52,10 @@ export function Review() {
     let current = true;
     Promise.all([listWords(), listReviews()]).then(
       ([words, reviews]) => {
-        if (current) setQueue(dueWords(groupWords(words), reviews, new Date()));
+        if (!current) return;
+        const { session, later: rest } = splitSession(dueWords(groupWords(words), reviews, new Date()));
+        setQueue(session);
+        setLater(rest);
       },
       () => {
         if (current) setLoadFailed(true);
@@ -79,15 +83,30 @@ export function Review() {
     }
   }
 
+  function startNextSession() {
+    const { session, later: rest } = splitSession(later);
+    setQueue(session);
+    setLater(rest);
+    setReviewed(new Set());
+  }
+
   if (loadFailed) return <p className="error" role="alert">Your review didn't load. Check your connection and try again.</p>;
   if (!queue) return <p className="empty" role="status">Finding your due words…</p>;
 
   const due = queue[0];
   if (!due) {
     return reviewed.size > 0 ? (
-      <p className="empty" role="status">
-        Review finished. You went through {reviewed.size} {reviewed.size === 1 ? "word" : "words"}.
-      </p>
+      <div className="review-done">
+        <p className="empty" role="status">
+          Review finished. You went through {reviewed.size} {reviewed.size === 1 ? "word" : "words"}.
+          {later.length > 0 && ` ${later.length} more ${later.length === 1 ? "is" : "are"} due and will wait for your next session.`}
+        </p>
+        {later.length > 0 && (
+          <button type="button" className="quiet" onClick={startNextSession}>
+            Review {Math.min(later.length, SESSION_LIMIT)} more now
+          </button>
+        )}
+      </div>
     ) : (
       <p className="empty" role="status">No words are due. Words you save will appear here.</p>
     );
@@ -99,7 +118,9 @@ export function Review() {
 
   return (
     <article className="review" aria-label="Review card">
-      <p className="review-left" role="status">{queue.length} left</p>
+      <p className="review-left" role="status">
+        {queue.length} left in this session{later.length > 0 && `, ${later.length} more for later`}
+      </p>
       <h2 className="word-page-title">{group.key}</h2>
       {reading ? (
         <figure className="word-reading">

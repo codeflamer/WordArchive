@@ -295,6 +295,17 @@ button:focus-visible {
   border-radius: 2px;
 }
 
+.review-done {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
+.review-done .empty {
+  margin: 0;
+  max-width: 34ch;
+}
+
 .last-checked {
   margin: 0.25rem 0 0;
   color: var(--faded);
