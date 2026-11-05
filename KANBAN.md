@@ -14,28 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F14: Resurface one past quote each day
-
-- **Depends on:** F03, F12
-- **Requirements:** Q3
-- **Story:** As the reader, I see one past quote each day after my review.
-- **Screen:** Quote of the day with its book and author
-- **Server:** Daily quote selection for the signed-in user
-- **Data:** Date each quote was last shown
-
-**Test steps**
-
-- [ ] Save at least 5 quotes.
-- [ ] Finish a review and check the quote shown.
-- [ ] Reopen the app the same day.
-- [ ] Claude tests the following days using simulated dates.
-
-**Passes if:** The quote stays the same all day, changes the next day, and doesn't repeat until the others have been shown.
-
-**Effectiveness check:** After 2 weeks, note whether the daily quote is still something you read.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F15: Open today's review from a daily reminder
 
 - **Depends on:** F12
@@ -106,6 +84,30 @@ None yet.
 
 ## Testing
 
+### F14: Resurface one past quote each day
+
+- **Depends on:** F03, F12
+- **Requirements:** Q3
+- **Story:** As the reader, I see one past quote each day after my review.
+- **Screen:** Quote of the day with its book and author
+- **Server:** Daily quote selection for the signed-in user
+- **Data:** Date each quote was last shown
+
+**Test steps**
+
+- [x] Save at least 5 quotes.
+- [x] Finish a review and check the quote shown.
+- [x] Reopen the app the same day.
+- [x] Claude tests the following days using simulated dates.
+
+**Passes if:** The quote stays the same all day, changes the next day, and doesn't repeat until the others have been shown.
+
+**Effectiveness check:** After 2 weeks, note whether the daily quote is still something you read.
+
+**Build progress:** Live together with F18 and F13, with all 303 automated tests passing, including simulated days on a real Postgres engine. Migration 012 has run, and it refuses signed-out access. Not tried in a browser, because the preview tool only runs the main folder, so the iPhone test is the first look at the screen.
+
+**Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not measured yet, due after 2 weeks of use, around 2026-11-19 | Issues: None
+
 ### F13: Cap review sessions and carry the rest over
 
 - **Depends on:** F12
@@ -118,7 +120,7 @@ None yet.
 **Test steps**
 
 - [x] Claude tests a session with 25 due words in a browser, using test data in that tab only, as new sign-ups are off.
-- [ ] Complete a session on your iPhone.
+- [x] Complete a session on your iPhone.
 - [x] Claude tests the next day's session, using a simulated date.
 
 **Passes if:** The session stops at the cap, and the remaining words appear in the next one.
@@ -127,7 +129,7 @@ None yet.
 
 **Build progress:** Built, with all 292 automated tests passing. In a browser with 25 due words, the session stopped at 10 and the next session offered the rest. Pushed before its iPhone test at the owner's request on 2026-11-05, so the F14 session could continue. The iPhone test is still to do.
 
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
+**Test record:** Date: 2026-11-05 | Result: Passed on iPhone, live with F14 | Effectiveness: Not measured yet, time a session to check it takes about 5 minutes or less | Issues: None
 
 ### F18: Keep the database awake and show its status
 

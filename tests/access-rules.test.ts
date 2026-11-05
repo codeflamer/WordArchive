@@ -38,6 +38,78 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/009_word_pronunciation.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/010_word_reviews.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/011_keep_awake.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/012_quote_of_the_day.sql", "utf8"));
+});
+
+describe("quote of the day", () => {
+  const addQuotes = async (...bodies: string[]) => {
+    for (const body of bodies) await db.query("insert into public.quotes (body) values ($1)", [body]);
+  };
+  const quoteOn = async (day: string) => {
+    const { rows } = await db.query<{ body: string }>("select body from public.quote_of_the_day($1)", [day]);
+    return rows[0]?.body;
+  };
+  const dayOf = (offset: number) => new Date(Date.UTC(2026, 10, 5 + offset)).toISOString().slice(0, 10);
+
+  it("keeps the same quote all day, and changes it the next day", async () => {
+    await as("authenticated", ALICE);
+    await addQuotes("One", "Two", "Three", "Four", "Five");
+    const today = await quoteOn(dayOf(0));
+    expect(await quoteOn(dayOf(0))).toBe(today);
+    expect(await quoteOn(dayOf(0))).toBe(today);
+    expect(await quoteOn(dayOf(1))).not.toBe(today);
+  });
+
+  it("shows every quote once before any repeats, across simulated weeks", async () => {
+    await as("authenticated", ALICE);
+    const bodies = ["One", "Two", "Three", "Four", "Five"];
+    await addQuotes(...bodies);
+    const firstRound = [];
+    for (let day = 0; day < 5; day += 1) firstRound.push(await quoteOn(dayOf(day)));
+    expect([...firstRound].sort()).toEqual([...bodies].sort());
+    const secondRound = [];
+    for (let day = 5; day < 10; day += 1) secondRound.push(await quoteOn(dayOf(day)));
+    expect([...secondRound].sort()).toEqual([...bodies].sort());
+  });
+
+  it("shows a newly saved quote before repeating older ones", async () => {
+    await as("authenticated", ALICE);
+    await addQuotes("One", "Two");
+    await quoteOn(dayOf(0));
+    await quoteOn(dayOf(1));
+    await addQuotes("New");
+    expect(await quoteOn(dayOf(2))).toBe("New");
+  });
+
+  it("returns nothing when there are no quotes", async () => {
+    await as("authenticated", ALICE);
+    expect(await quoteOn(dayOf(0))).toBeUndefined();
+  });
+
+  it("only ever picks from the reader's own quotes", async () => {
+    await as("authenticated", ALICE);
+    await addQuotes("Alice's");
+    await as("authenticated", BOB);
+    expect(await quoteOn(dayOf(0))).toBeUndefined();
+    await as("authenticated", ALICE);
+    const { rows } = await db.query("select last_shown_on from public.quotes");
+    expect(rows).toEqual([{ last_shown_on: null }]);
+  });
+
+  it("can't change a quote's words or someone else's shown date", async () => {
+    await as("authenticated", ALICE);
+    await addQuotes("Exact words");
+    await expect(db.query("update public.quotes set body = 'x'")).rejects.toThrow(/permission denied/);
+    await expect(db.query("delete from public.quotes")).rejects.toThrow(/permission denied/);
+    await as("authenticated", BOB);
+    expect((await db.query("update public.quotes set last_shown_on = current_date")).affectedRows).toBe(0);
+  });
+
+  it("blocks signed-out access", async () => {
+    await as("anon", null);
+    await expect(quoteOn(dayOf(0))).rejects.toThrow(/permission denied/);
+    await expect(db.query("update public.quotes set last_shown_on = current_date")).rejects.toThrow(/permission denied/);
+  });
 });
 
 describe("review schedule and history", () => {

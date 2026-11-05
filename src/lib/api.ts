@@ -190,6 +190,12 @@ export async function recordReview(wordKey: string, rating: number, card: Card):
   if (error) throw error;
 }
 
+export async function getQuoteOfTheDay(today: string): Promise<SavedQuote | null> {
+  const { data, error } = await client().rpc("quote_of_the_day", { p_today: today }).select(QUOTE_FIELDS);
+  if (error) throw error;
+  return (data as unknown as SavedQuote[])[0] ?? null;
+}
+
 export async function listQuotes(): Promise<SavedQuote[]> {
   const { data, error } = await client()
     .from("quotes")

@@ -111,6 +111,15 @@ const fake = createServer((req, res) => {
       else reviews.push(row);
       return res.writeHead(204).end();
     }
+    if (path === "/rest/v1/rpc/quote_of_the_day" && req.method === "POST") {
+      const { p_today } = JSON.parse(body);
+      let chosen = quotes.find((item) => item.last_shown_on === p_today);
+      if (!chosen) {
+        chosen = [...quotes].sort((a, b) => (a.last_shown_on ?? "").localeCompare(b.last_shown_on ?? ""))[0];
+        if (chosen) chosen.last_shown_on = p_today;
+      }
+      return json(200, chosen ? [chosen] : []);
+    }
     if (path === "/rest/v1/quotes" && req.method === "GET") return json(200, quotes);
     if (path === "/rest/v1/quotes" && req.method === "POST") {
       const { id, body: text, book_id } = JSON.parse(body);

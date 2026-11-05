@@ -31,6 +31,7 @@ vi.mock("../src/lib/api", () => ({
   listReviews: vi.fn(),
   getReview: vi.fn(),
   recordReview: vi.fn(),
+  getQuoteOfTheDay: vi.fn(),
 }));
 
 vi.mock("../src/lib/speak", () => ({ playWord: vi.fn() }));
@@ -75,6 +76,77 @@ beforeEach(() => {
   mocked.listReviews.mockResolvedValue([]);
   mocked.getReview.mockResolvedValue(null);
   mocked.recordReview.mockResolvedValue();
+  mocked.getQuoteOfTheDay.mockResolvedValue(null);
+});
+
+describe("quote of the day", () => {
+  const quote = {
+    id: "q1",
+    body: "It is a truth,\nuniversally acknowledged.",
+    created_at: "2026-11-02T10:00:00Z",
+    book: { title: "Pride and Prejudice", author: "Jane Austen" },
+  };
+  const dueWord = { ...entry("sanction"), definitions, definition_status: "found" as const };
+
+  async function openReview(words: (typeof dueWord)[] = []) {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue(words);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Review" }));
+    return user;
+  }
+
+  it("waits until the review is finished, then shows the quote with its book and author", async () => {
+    mocked.getQuoteOfTheDay.mockResolvedValue(quote);
+    const user = await openReview([dueWord]);
+    await user.click(await screen.findByRole("button", { name: "Show meaning" }));
+    expect(screen.queryByLabelText("Quote of the day")).not.toBeInTheDocument();
+    expect(mocked.getQuoteOfTheDay).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /^Easy/ }));
+    const shown = await screen.findByLabelText("Quote of the day");
+    expect(shown.querySelector("blockquote")?.textContent).toBe(quote.body);
+    expect(within(shown).getByText("Pride and Prejudice")).toBeInTheDocument();
+    expect(shown).toHaveTextContent("by Jane Austen");
+  });
+
+  it("shows on a day with nothing due, using the reader's own date", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 5, 23, 30));
+    mocked.getQuoteOfTheDay.mockResolvedValue(quote);
+    await openReview();
+    expect(await screen.findByLabelText("Quote of the day")).toBeInTheDocument();
+    expect(mocked.getQuoteOfTheDay).toHaveBeenCalledWith("2026-11-05");
+    vi.useRealTimers();
+  });
+
+  it("shows beside the offer to review more, when a capped session ends", async () => {
+    mocked.getQuoteOfTheDay.mockResolvedValue(quote);
+    const words = Array.from({ length: 11 }, (_, index) => ({ ...dueWord, id: `word${index}`, word: `word${String.fromCharCode(97 + index)}` }));
+    const user = await openReview(words);
+    for (let index = 0; index < 10; index += 1) {
+      await user.click(await screen.findByRole("button", { name: "Show meaning" }));
+      await user.click(screen.getByRole("button", { name: /^Easy/ }));
+    }
+    expect(await screen.findByLabelText("Quote of the day")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review 1 more now" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Review 1 more now" }));
+    expect(await screen.findByRole("button", { name: "Show meaning" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Quote of the day")).not.toBeInTheDocument();
+  });
+
+  it("stays away with no quotes, or when it can't load", async () => {
+    await openReview();
+    await screen.findByText("No words are due. Words you save will appear here.");
+    await waitFor(() => expect(mocked.getQuoteOfTheDay).toHaveBeenCalled());
+    expect(screen.queryByLabelText("Quote of the day")).not.toBeInTheDocument();
+    cleanup();
+    mocked.getQuoteOfTheDay.mockRejectedValue(new Error("offline"));
+    await openReview();
+    await screen.findByText("No words are due. Words you save will appear here.");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Quote of the day")).not.toBeInTheDocument();
+  });
 });
 
 describe("reviewing due words", () => {

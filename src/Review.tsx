@@ -3,6 +3,7 @@ import type { Grade } from "ts-fsrs";
 import { listReviews, listWords, recordReview } from "./lib/api";
 import { groupWords } from "./lib/groups";
 import { comesBackToday, dueWords, previewWaits, rate, RATINGS, SESSION_LIMIT, splitOnWord, splitSession, type DueWord } from "./lib/review";
+import { QuoteOfTheDay } from "./QuoteOfTheDay";
 import { MeaningList } from "./WordPage";
 
 function Sentence({ text, forms }: { text: string; forms: string[] }) {
@@ -95,20 +96,25 @@ export function Review() {
 
   const due = queue[0];
   if (!due) {
-    return reviewed.size > 0 ? (
-      <div className="review-done">
-        <p className="empty" role="status">
-          Review finished. You went through {reviewed.size} {reviewed.size === 1 ? "word" : "words"}.
-          {later.length > 0 && ` ${later.length} more ${later.length === 1 ? "is" : "are"} due and will wait for your next session.`}
-        </p>
-        {later.length > 0 && (
-          <button type="button" className="quiet" onClick={startNextSession}>
-            Review {Math.min(later.length, SESSION_LIMIT)} more now
-          </button>
+    return (
+      <>
+        {reviewed.size > 0 ? (
+          <div className="review-done">
+            <p className="empty" role="status">
+              Review finished. You went through {reviewed.size} {reviewed.size === 1 ? "word" : "words"}.
+              {later.length > 0 && ` ${later.length} more ${later.length === 1 ? "is" : "are"} due and will wait for your next session.`}
+            </p>
+            {later.length > 0 && (
+              <button type="button" className="quiet" onClick={startNextSession}>
+                Review {Math.min(later.length, SESSION_LIMIT)} more now
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="empty" role="status">No words are due. Words you save will appear here.</p>
         )}
-      </div>
-    ) : (
-      <p className="empty" role="status">No words are due. Words you save will appear here.</p>
+        <QuoteOfTheDay />
+      </>
     );
   }
 
