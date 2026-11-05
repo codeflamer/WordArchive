@@ -539,6 +539,97 @@ describe("AI meaning and examples", () => {
   });
 });
 
+describe("searching", () => {
+  const saved = [
+    { ...entry("sanction", "Middlemarch", "The council gave its sanction."), definitions, definition_status: "found" as const },
+    { ...entry("lucid", "Beloved"), definitions, definition_status: "found" as const },
+  ];
+  const quotesSaved = [savedQuote("It is a truth universally acknowledged.", middlemarch), savedQuote("Definitions belong to the definers.", beloved)];
+
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue(saved);
+    mocked.listQuotes.mockResolvedValue(quotesSaved);
+    mocked.listBooks.mockResolvedValue([middlemarch, beloved]);
+  });
+
+  async function openSearch() {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Search" }));
+    const box = await screen.findByLabelText("Search words, sentences, quotes, books and authors");
+    await waitFor(() => expect(mocked.listBooks).toHaveBeenCalled());
+    return { user, box };
+  }
+
+  it("finds a saved word, showing its meaning and sentence", async () => {
+    const { user, box } = await openSearch();
+    await user.type(box, "sanction");
+    const area = screen.getByRole("region", { name: "Search" });
+    expect(await within(area).findByText("1 result")).toBeInTheDocument();
+    expect(within(area).getByText("sanction")).toBeVisible();
+    expect(within(area).getByText("An approval.")).toBeVisible();
+    expect(within(area).getByText("The council gave its sanction.")).toBeVisible();
+  });
+
+  it("finds a phrase inside a quote", async () => {
+    const { user, box } = await openSearch();
+    await user.type(box, "universally");
+    const area = screen.getByRole("region", { name: "Search" });
+    expect(await within(area).findByText("It is a truth universally acknowledged.")).toBeVisible();
+    expect(within(area).queryByText("Definitions belong to the definers.")).not.toBeInTheDocument();
+  });
+
+  it("finds words and quotes by book title and by author", async () => {
+    const { user, box } = await openSearch();
+    await user.type(box, "Middlemarch");
+    const area = screen.getByRole("region", { name: "Search" });
+    expect(await within(area).findByText("2 results")).toBeInTheDocument();
+    await user.clear(box);
+    await user.type(box, "Morrison");
+    expect(await within(area).findByText("lucid")).toBeVisible();
+    expect(within(area).getByText("Definitions belong to the definers.")).toBeVisible();
+  });
+
+  it("says when nothing matches", async () => {
+    const { user, box } = await openSearch();
+    await user.type(box, "zzzznothing");
+    expect(await screen.findByText("Nothing found for “zzzznothing”.")).toBeInTheDocument();
+  });
+
+  it("shows nothing until something is typed", async () => {
+    await openSearch();
+    expect(screen.queryByText(/result|Nothing found/)).not.toBeInTheDocument();
+  });
+
+  it("searches the saved copy and waiting saves without signal", async () => {
+    localStorage.setItem("wordarchive.words.v1", JSON.stringify(saved));
+    localStorage.setItem("wordarchive.outbox.v1", JSON.stringify([{ kind: "quote", id: "q1", body: "A line saved offline.", bookId: null, bookTitle: null, bookAuthor: null, createdAt: "2026-11-05T10:00:00Z" }]));
+    mocked.listWords.mockRejectedValue(new Error("offline"));
+    mocked.listQuotes.mockRejectedValue(new Error("offline"));
+    mocked.listBooks.mockRejectedValue(new Error("offline"));
+    // With no signal, sending waiting saves fails too, so they stay waiting.
+    mocked.addQuote.mockRejectedValue(new Error("offline"));
+    mocked.addWord.mockRejectedValue(new Error("offline"));
+    const { user, box } = await openSearch();
+    expect(await screen.findByText(/Searching the copy saved on this phone/)).toBeInTheDocument();
+    await user.type(box, "offline");
+    const area = screen.getByRole("region", { name: "Search" });
+    expect(await within(area).findByText("A line saved offline.")).toBeVisible();
+    await user.clear(box);
+    await user.type(box, "lucid");
+    expect(await screen.findByText("1 result")).toBeInTheDocument();
+  });
+
+  it("saves the lists it refreshes, so a later search without signal finds them", async () => {
+    // The Quotes tab loads first and sees an older, empty list; search then gets the newer one.
+    mocked.listQuotes.mockResolvedValueOnce([]);
+    await openSearch();
+    await waitFor(() => expect(localStorage.getItem("wordarchive.quotes.v1")).toContain("universally acknowledged"));
+    expect(localStorage.getItem("wordarchive.words.v1")).toContain("sanction");
+  });
+});
+
 describe("the database status line", () => {
   beforeEach(() => {
     mocked.getSession.mockResolvedValue(session);

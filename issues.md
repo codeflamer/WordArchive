@@ -21,6 +21,21 @@ A card can't move to Done until its full test is run again and passes.
 
 ## Resolved
 
+### ISS-012: Search without signal missed entries added since the app opened
+
+- **Card:** F16
+- **Found:** 2026-11-05
+- **Severity:** Major
+- **Steps to reproduce:**
+  1. Open the app, then add a quote from another device.
+  2. Open Search, which shows the new quote.
+  3. Lose signal, reopen the app and search for that quote.
+- **Expected:** The quote is found in the copy saved on the phone.
+- **Actual:** Nothing was found.
+- **Cause:** Search refreshed its lists but didn't save them to the phone. Only the Words and Quotes tabs did, when the app opened. Searching a word by its author also failed without signal, because authors came only from the books list, which isn't saved.
+- **Fix:** Search now saves the lists it refreshes, but only while its screen is open, so sign-out can't bring a copy back (ISS-008). Authors are also taken from the quotes' books.
+- **Retest:** 2026-11-05. A new app test fails without the fix and passes with it, all 323 tests pass, and the browser check without signal found the quote and the author's word.
+
 ### ISS-011: Sign-out tests failed intermittently
 
 - **Card:** F06

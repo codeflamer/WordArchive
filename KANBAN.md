@@ -35,28 +35,6 @@ The effectiveness targets below are proposed and can be changed.
 
 **Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
 
-### F16: Search words and quotes
-
-- **Depends on:** F03, F05
-- **Requirements:** D1
-- **Story:** As the reader, I search by text, book or author and find what I saved.
-- **Screen:** Search box and results
-- **Server:** Search runs only over the user's own entries
-- **Data:** Search across words, quotes and books
-
-**Test steps**
-
-- [ ] Search for a saved word.
-- [ ] Search for a phrase inside a quote.
-- [ ] Search for a book title and an author.
-- [ ] Search for something that doesn't exist.
-
-**Passes if:** Each search finds the matching entries, and the empty search says nothing was found.
-
-**Effectiveness check:** You can find any quote you remember within 15 seconds.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F17: Export everything to a file
 
 - **Depends on:** F03, F05
@@ -80,9 +58,30 @@ The effectiveness targets below are proposed and can be changed.
 
 ## In progress
 
-None yet.
-
 ## Testing
+
+### F16: Search words and quotes
+
+- **Depends on:** F03, F05
+- **Requirements:** D1
+- **Story:** As the reader, I search by text, book or author and find what I saved.
+- **Screen:** Search box and results
+- **Server:** None needed. The search runs on the phone over the reader's own saved entries, so it also works without signal
+- **Data:** Words, quotes and books already held by the app, with authors matched through the books list, or through quotes' books without signal
+
+**Test steps**
+
+- [x] Search for a saved word.
+- [x] Search for a phrase inside a quote.
+- [x] Search for a book title and an author.
+- [x] Search for something that doesn't exist.
+- [x] Search again without signal.
+
+**Passes if:** Each search finds the matching entries, and the empty search says nothing was found.
+
+**Effectiveness check:** You can find any quote you remember within 15 seconds.
+
+**Test record:** Date: 2026-11-05 | Result: Passed on the iPhone, with 323 automated tests passing | Effectiveness: Waiting for the 15-second check | Issues: ISS-012
 
 ### F14: Resurface one past quote each day
 

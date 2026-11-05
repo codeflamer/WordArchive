@@ -5,9 +5,10 @@ import { cacheBook, readCachedBook } from "./lib/cache";
 import { savedOn } from "./lib/dates";
 import { Quotes } from "./Quotes";
 import { Review } from "./Review";
+import { Search } from "./Search";
 import { Words } from "./Words";
 
-type Section = "words" | "quotes" | "review";
+type Section = "words" | "quotes" | "review" | "search";
 
 export function Home() {
   const [book, setBook] = useState<Book | null | undefined>(readCachedBook);
@@ -89,6 +90,9 @@ export function Home() {
           <button type="button" aria-current={section === "review" ? "page" : undefined} onClick={() => setSection("review")}>
             Review
           </button>
+          <button type="button" aria-current={section === "search" ? "page" : undefined} onClick={() => setSection("search")}>
+            Search
+          </button>
         </nav>
 
         {error && <p className="error" role="alert">{error}</p>}
@@ -101,6 +105,8 @@ export function Home() {
         </div>
         {/* Opens fresh each time, so it includes words saved since the last visit. */}
         {section === "review" && <Review />}
+        {/* Also opens fresh, so new saves are searchable straight away. */}
+        {section === "search" && <Search />}
 
         <button className="quiet leave" onClick={leave}>Sign out</button>
         {lastChecked && <p className="last-checked">Database last checked {savedOn.format(new Date(lastChecked))}</p>}

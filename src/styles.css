@@ -706,3 +706,26 @@ textarea:focus {
   font-size: 0.8125rem;
   font-weight: 400;
 }
+
+.search {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.search .entries,
+.search .quotes {
+  margin-top: 0.5rem;
+}
+
+.search-meaning,
+.search-sentence {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.search-sentence {
+  color: var(--faded);
+  font-size: 0.9375rem;
+  font-style: italic;
+}
