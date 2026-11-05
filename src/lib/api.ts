@@ -1,5 +1,7 @@
 import { createClient, isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
+import type { Card } from "ts-fsrs";
 import type { AiContent, Definitions, LookupResult, Pronunciation } from "./definitions";
+import type { WordReview } from "./review";
 
 export type Book = { id: string; title: string; author: string };
 export type DefinitionStatus = "found" | "not_found";
@@ -36,6 +38,7 @@ const WORD_FIELDS =
   "id, word, base_form, sentence, created_at, definitions, definition_status, spelling_suggestions, kept_as_typed, ai_content, pronunciation, book:books(title)";
 const QUOTE_FIELDS = "id, body, created_at, book:books(title, author)";
 const BOOK_FIELDS = "id, title, author";
+const REVIEW_FIELDS = "word_key, card, due, last_review";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
@@ -161,6 +164,23 @@ export async function savePronunciation(wordId: string, pronunciation: Pronuncia
 
 export async function keepAsTyped(wordId: string): Promise<void> {
   const { error } = await client().from("words").update({ kept_as_typed: true }).eq("id", wordId);
+  if (error) throw error;
+}
+
+export async function listReviews(): Promise<WordReview[]> {
+  const { data, error } = await client().from("word_reviews").select(REVIEW_FIELDS);
+  if (error) throw error;
+  return data as unknown as WordReview[];
+}
+
+export async function getReview(wordKey: string): Promise<WordReview | null> {
+  const { data, error } = await client().from("word_reviews").select(REVIEW_FIELDS).eq("word_key", wordKey).maybeSingle();
+  if (error) throw error;
+  return data as unknown as WordReview | null;
+}
+
+export async function recordReview(wordKey: string, rating: number, card: Card): Promise<void> {
+  const { error } = await client().rpc("record_review", { p_word_key: wordKey, p_rating: rating, p_card: card });
   if (error) throw error;
 }
 

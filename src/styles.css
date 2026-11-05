@@ -627,3 +627,52 @@ textarea:focus {
 .add-book {
   margin-top: 1.5rem;
 }
+
+.review {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-left {
+  margin: 0;
+  color: var(--faded);
+}
+
+.review mark {
+  background: none;
+  color: var(--ribbon);
+  font-weight: 600;
+}
+
+/* Stays in reach under a long list of definitions. */
+.ratings {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.375rem;
+  padding: 0.5rem 0;
+  background: var(--paper);
+}
+
+.rating {
+  display: grid;
+  gap: 0.125rem;
+  min-height: 3.25rem;
+  padding: 0.375rem 0.125rem;
+  border: 1px solid var(--ribbon);
+  border-radius: 0.25rem;
+  background: none;
+  color: var(--ribbon);
+  font-weight: 600;
+}
+
+.rating:disabled {
+  opacity: 0.6;
+}
+
+.rating-wait {
+  color: var(--faded);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}

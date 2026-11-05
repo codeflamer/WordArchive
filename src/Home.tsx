@@ -3,9 +3,10 @@ import { Books } from "./Books";
 import { getCurrentBook, signOut, type Book } from "./lib/api";
 import { cacheBook, readCachedBook } from "./lib/cache";
 import { Quotes } from "./Quotes";
+import { Review } from "./Review";
 import { Words } from "./Words";
 
-type Section = "words" | "quotes";
+type Section = "words" | "quotes" | "review";
 
 export function Home() {
   const [book, setBook] = useState<Book | null | undefined>(readCachedBook);
@@ -78,6 +79,9 @@ export function Home() {
           <button type="button" aria-current={section === "quotes" ? "page" : undefined} onClick={() => setSection("quotes")}>
             Quotes
           </button>
+          <button type="button" aria-current={section === "review" ? "page" : undefined} onClick={() => setSection("review")}>
+            Review
+          </button>
         </nav>
 
         {error && <p className="error" role="alert">{error}</p>}
@@ -88,6 +92,8 @@ export function Home() {
         <div hidden={section !== "quotes"}>
           <Quotes book={book} />
         </div>
+        {/* Opens fresh each time, so it includes words saved since the last visit. */}
+        {section === "review" && <Review />}
 
         <button className="quiet leave" onClick={leave}>Sign out</button>
       </main>

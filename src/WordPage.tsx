@@ -1,12 +1,14 @@
-import { useState } from "react";
-import type { SavedWord } from "./lib/api";
+import { useEffect, useState } from "react";
+import { getReview, type SavedWord } from "./lib/api";
 import { playWord } from "./lib/speak";
 import { savedOn } from "./lib/dates";
 import { dictionaryExamples, type Meaning } from "./lib/definitions";
-import type { Reading } from "./lib/groups";
+import type { Reading, WordGroup } from "./lib/groups";
+import { canReview, isDue, type WordReview } from "./lib/review";
 import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 
 type WordPageProps = {
+  group: WordGroup;
   word: SavedWord;
   bookTitles: string[];
   typedForms: string[];
@@ -121,7 +123,31 @@ function AiHelp({ word, readings, aiFailed, onRetryAi }: { word: SavedWord; read
   );
 }
 
-function MeaningList({ meanings }: { meanings: Meaning[] }) {
+function NextReview({ group }: { group: WordGroup }) {
+  const [review, setReview] = useState<WordReview | null | undefined>(undefined);
+
+  // Read on opening, so it's right after a review session. Without signal the line just stays away.
+  useEffect(() => {
+    let current = true;
+    getReview(group.key).then(
+      (found) => current && setReview(found),
+      () => {},
+    );
+    return () => {
+      current = false;
+    };
+  }, [group.key]);
+
+  if (review === undefined) return null;
+  const now = new Date();
+  return (
+    <p className="source">
+      {isDue(group, review ?? undefined, now) ? "Due for review now" : `Next review ${savedOn.format(new Date(review!.due))}`}
+    </p>
+  );
+}
+
+export function MeaningList({ meanings }: { meanings: Meaning[] }) {
   return (
     <>
       {meanings.map((meaning, index) => (
@@ -181,7 +207,7 @@ function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Pick<Wor
   return <p className="empty" role="status">Looking up this word…</p>;
 }
 
-export function WordPage({ word, bookTitles, typedForms, readings, lookupFailed, aiFailed, onRetryAi, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
+export function WordPage({ group, word, bookTitles, typedForms, readings, lookupFailed, aiFailed, onRetryAi, onRetry, onChoose, onKeep, onBack }: WordPageProps) {
   return (
     <article className="word-page">
       <button type="button" className="quiet" onClick={onBack}>Back to words</button>
@@ -196,6 +222,7 @@ export function WordPage({ word, bookTitles, typedForms, readings, lookupFailed,
         )}
         first saved <time dateTime={word.created_at}>{savedOn.format(new Date(word.created_at))}</time>
       </p>
+      {canReview(group) && <NextReview group={group} />}
       {readings.length > 0 ? (
         readings.map((reading) => (
           <figure className="word-reading" key={reading.id}>

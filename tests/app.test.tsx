@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -27,6 +27,9 @@ vi.mock("../src/lib/api", () => ({
   pronounceWord: vi.fn(),
   savePronunciation: vi.fn(),
   isOfflineError: vi.fn(),
+  listReviews: vi.fn(),
+  getReview: vi.fn(),
+  recordReview: vi.fn(),
 }));
 
 vi.mock("../src/lib/speak", () => ({ playWord: vi.fn() }));
@@ -67,6 +70,110 @@ beforeEach(() => {
   mocked.getCurrentBook.mockResolvedValue(null);
   mocked.listBooks.mockResolvedValue([]);
   mocked.listQuotes.mockResolvedValue([]);
+  mocked.listReviews.mockResolvedValue([]);
+  mocked.getReview.mockResolvedValue(null);
+  mocked.recordReview.mockResolvedValue();
+});
+
+describe("reviewing due words", () => {
+  const ready = (word: string, sentence: string | null = null, extra: object = {}) => ({
+    ...entry(word, "Middlemarch", sentence),
+    definitions,
+    definition_status: "found" as const,
+    ...extra,
+  });
+
+  async function openReview(words: ReturnType<typeof ready>[]) {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue(words);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Review" }));
+    return user;
+  }
+
+  it("shows the word in its book sentence, and the meaning only after flipping", async () => {
+    const user = await openReview([ready("sanction", "The sanction was lifted.")]);
+    const card = await screen.findByRole("article", { name: "Review card" });
+    expect(within(card).getByRole("heading", { name: "sanction" })).toBeInTheDocument();
+    expect(within(card).getByText("sanction", { selector: "mark" })).toBeInTheDocument();
+    expect(within(card).getByText("Middlemarch")).toBeInTheDocument();
+    expect(screen.queryByText("An approval.")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show meaning" }));
+    expect(screen.getByText("An approval.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Forgot, next review in 1 min/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Easy, next review in \d+ days/ })).toBeInTheDocument();
+  });
+
+  it("labels an AI meaning, and still reviews a word without one", async () => {
+    const chosen = { chosenMeaning: { partOfSpeech: "noun", definition: "A penalty." }, examples: [] };
+    const user = await openReview([ready("sanction", "A line.", { ai_content: chosen })]);
+    await user.click(await screen.findByRole("button", { name: "Show meaning" }));
+    expect(screen.getByLabelText("Written by AI")).toHaveTextContent("A penalty.");
+    cleanup();
+    const again = await openReview([ready("plain")]);
+    await again.click(await screen.findByRole("button", { name: "Show meaning" }));
+    expect(screen.queryByLabelText("Written by AI")).not.toBeInTheDocument();
+    expect(screen.getByText("An approval.")).toBeInTheDocument();
+  });
+
+  it("saves the rating and moves on, repeating a forgotten word until it's remembered", async () => {
+    const user = await openReview([ready("first"), ready("second")]);
+    const heading = async () => (await screen.findByRole("article", { name: "Review card" })).querySelector("h2")?.textContent;
+    const shown = await heading();
+    const other = shown === "first" ? "second" : "first";
+
+    await user.click(screen.getByRole("button", { name: "Show meaning" }));
+    await user.click(screen.getByRole("button", { name: /^Forgot/ }));
+    await waitFor(async () => expect(await heading()).toBe(other));
+    expect(mocked.recordReview).toHaveBeenCalledWith(shown, 1, expect.objectContaining({ reps: 1 }));
+
+    await user.click(screen.getByRole("button", { name: "Show meaning" }));
+    await user.click(screen.getByRole("button", { name: /^Easy/ }));
+    await waitFor(async () => expect(await heading()).toBe(shown));
+
+    await user.click(screen.getByRole("button", { name: "Show meaning" }));
+    await user.click(screen.getByRole("button", { name: /^Good/ }));
+    expect(await screen.findByText("Review finished. You went through 2 words.")).toBeInTheDocument();
+    expect(mocked.recordReview).toHaveBeenCalledTimes(3);
+  });
+
+  it("leaves out words with no definition, and says when nothing is due", async () => {
+    await openReview([ready("unknown", null, { definitions: null, definition_status: "not_found", kept_as_typed: true })]);
+    expect(await screen.findByText("No words are due. Words you save will appear here.")).toBeInTheDocument();
+  });
+
+  it("keeps the card when a rating fails to save, so it can be tried again", async () => {
+    mocked.recordReview.mockRejectedValueOnce(new Error("offline"));
+    const user = await openReview([ready("sanction")]);
+    await user.click(await screen.findByRole("button", { name: "Show meaning" }));
+    await user.click(screen.getByRole("button", { name: /^Easy/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your rating wasn't saved.");
+    await user.click(screen.getByRole("button", { name: /^Easy/ }));
+    expect(await screen.findByText("Review finished. You went through 1 word.")).toBeInTheDocument();
+  });
+
+  it("says so when the review can't load", async () => {
+    mocked.listReviews.mockRejectedValue(new Error("offline"));
+    await openReview([ready("sanction")]);
+    expect(await screen.findByText("Your review didn't load. Check your connection and try again.")).toBeInTheDocument();
+  });
+
+  it("shows the next review date on the word's page", async () => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([{ ...ready("sanction"), ai_content: aiContent }]);
+    mocked.getReview.mockResolvedValue({
+      word_key: "sanction",
+      card: {} as never,
+      due: "2099-03-10T12:00:00Z",
+      last_review: "2099-03-01T12:00:00Z",
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "sanction" }));
+    expect(await screen.findByText(/^Next review .*2099/)).toBeInTheDocument();
+    expect(mocked.getReview).toHaveBeenCalledWith("sanction");
+  });
 });
 
 const savedQuote = (body: string, book: { title: string; author: string } | null = null) => ({

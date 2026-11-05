@@ -339,6 +339,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
 
       {openGroup && openWord && (
         <WordPage
+          group={openGroup}
           word={openWord}
           bookTitles={openGroup.bookTitles}
           typedForms={openGroup.typedForms}

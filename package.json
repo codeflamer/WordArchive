@@ -15,7 +15,8 @@
     "@fontsource-variable/literata": "^5.3.0",
     "@supabase/supabase-js": "^2.118.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "ts-fsrs": "5.4.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.14",

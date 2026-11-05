@@ -14,33 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F12: Review due words with spaced repetition
-
-- **Depends on:** F05
-- **Requirements:** R1, R2, R3
-- **Story:** As the reader, I see due words in their book sentences, recall the meaning, flip the card and mark how well I knew it.
-- **Screen:** Review session with flip and rating buttons
-- **Server:** Access rules cover review history
-- **Data:** Next review date and history stored per word
-
-**Before starting**
-
-- [ ] Confirm the `ts-fsrs` library's current version, maintenance and licence.
-- [ ] Decide whether incomplete words appear in review before AI fills them in.
-
-**Test steps**
-
-- [ ] Save 3 words, and start a review.
-- [ ] Flip each card and rate one as forgotten and one as easy.
-- [ ] Check the next review date for each.
-- [ ] Claude runs automated tests of the schedule across simulated dates.
-
-**Passes if:** Only due words appear, and a forgotten word comes back sooner than an easy one.
-
-**Effectiveness check:** After 2 weeks of use, record how many reviewed words you recall from a sample of 10.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F13: Cap review sessions and carry the rest over
 
 - **Depends on:** F12
@@ -175,6 +148,37 @@ The effectiveness targets below are proposed and can be changed.
 None yet.
 
 ## Testing
+
+### F12: Review due words with spaced repetition
+
+- **Depends on:** F05
+- **Requirements:** R1, R2, R3
+- **Story:** As the reader, I see due words in their book sentences, recall the meaning, flip the card and mark how well I knew it.
+- **Screen:** Review session with flip and rating buttons
+- **Server:** Access rules cover review history
+- **Data:** Next review date and history stored per word
+
+**Before starting**
+
+- [x] Confirm the `ts-fsrs` library's current version, maintenance and licence. MIT licence and actively released. Using 5.4.2 with no dependencies, because 6.0.0 is a week old and asks for Node 24 (checked 2026-11-05).
+- [x] Decide whether incomplete words appear in review before AI fills them in. Yes, if the word has a definition. Words with no definition stay out (decided 2026-11-05).
+- [x] Decide whether saving a word again brings it into review sooner. Yes, it's due straight away (decided 2026-11-05).
+- [x] Decide how soon a word can come back. A forgotten word repeats in the same session until it's remembered (decided 2026-11-05).
+
+**Test steps**
+
+- [x] Save 3 words, and start a review.
+- [x] Flip each card and rate one as forgotten and one as easy.
+- [x] Check the next review date for each.
+- [x] Claude runs automated tests of the schedule across simulated dates.
+
+**Passes if:** Only due words appear, and a forgotten word comes back sooner than an easy one.
+
+**Effectiveness check:** After 2 weeks of use, record how many reviewed words you recall from a sample of 10.
+
+**Build progress:** Built, with all 269 automated tests passing, and the flow works in a browser against the fake local server, including repeat saves and phone width. Live, and the new tables on the real database refuse signed-out access.
+
+**Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not measured yet, due after 2 weeks of use, around 2026-11-19 | Issues: None
 
 ### F11: Save without signal and sync later
 

@@ -6,6 +6,7 @@ import { createServer as createVite } from "vite";
 const words = [];
 const books = [];
 const quotes = [];
+const reviews = [];
 let currentBookId = null;
 let lookups = 0;
 let aiCalls = 0;
@@ -19,7 +20,7 @@ function session() {
   return { access_token, refresh_token: "test", token_type: "bearer", expires_in: 3600, expires_at, user };
 }
 
-createServer((req, res) => {
+const fake = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] ?? "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
@@ -97,6 +98,18 @@ createServer((req, res) => {
       words.unshift(word);
       return json(201, word);
     }
+    if (path === "/rest/v1/word_reviews" && req.method === "GET") {
+      const key = new URL(req.url, "http://localhost").searchParams.get("word_key")?.replace("eq.", "");
+      return json(200, key ? reviews.filter((item) => item.word_key === key) : reviews);
+    }
+    if (path === "/rest/v1/rpc/record_review" && req.method === "POST") {
+      const { p_word_key, p_card } = JSON.parse(body);
+      const row = { word_key: p_word_key, card: p_card, due: p_card.due, last_review: p_card.last_review };
+      const index = reviews.findIndex((item) => item.word_key === p_word_key);
+      if (index >= 0) reviews[index] = row;
+      else reviews.push(row);
+      return res.writeHead(204).end();
+    }
     if (path === "/rest/v1/quotes" && req.method === "GET") return json(200, quotes);
     if (path === "/rest/v1/quotes" && req.method === "POST") {
       const { id, body: text, book_id } = JSON.parse(body);
@@ -123,8 +136,13 @@ createServer((req, res) => {
     }
     json(404, { message: "Not found" });
   });
-}).listen(54399);
+});
 
-const vite = await createVite({ mode: "e2e", server: { port: Number(process.env.PORT) || 5174, strictPort: true, proxy: { "/api": "http://localhost:54399" } } });
+// Any free port, so this can run alongside another copy of the app.
+await new Promise((resolve) => fake.listen(0, resolve));
+const fakeUrl = `http://localhost:${fake.address().port}`;
+process.env.VITE_SUPABASE_URL = fakeUrl;
+
+const vite = await createVite({ mode: "e2e", server: { port: Number(process.env.PORT) || 5174, strictPort: true, proxy: { "/api": fakeUrl } } });
 await vite.listen();
 vite.printUrls();

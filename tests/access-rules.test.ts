@@ -36,6 +36,69 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/007_word_spelling.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/008_word_ai_content.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/009_word_pronunciation.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/010_word_reviews.sql", "utf8"));
+});
+
+describe("review schedule and history", () => {
+  const card = (due: string) => JSON.stringify({ due, last_review: "2026-11-05T12:00:00Z", reps: 1 });
+  const record = (key: string, rating: number, due: string) =>
+    db.query("select public.record_review($1, $2, $3::jsonb)", [key, rating, card(due)]);
+
+  it("saves the next date and a history row together, keeping one schedule per word", async () => {
+    await as("authenticated", ALICE);
+    await record("sanction", 1, "2026-11-05T12:01:00Z");
+    await record("sanction", 4, "2026-11-15T12:00:00Z");
+    const schedule = await db.query<{ word_key: string; user_id: string; due: Date }>("select word_key, user_id, due from public.word_reviews");
+    expect(schedule.rows).toHaveLength(1);
+    expect(schedule.rows[0]).toMatchObject({ word_key: "sanction", user_id: ALICE });
+    expect(schedule.rows[0].due.toISOString()).toBe("2026-11-15T12:00:00.000Z");
+    const history = await db.query("select rating from public.word_review_log order by next_due");
+    expect(history.rows).toEqual([{ rating: 1 }, { rating: 4 }]);
+  });
+
+  it("saves neither when the rating is invalid", async () => {
+    await as("authenticated", ALICE);
+    await expect(record("sanction", 9, "2026-11-15T12:00:00Z")).rejects.toThrow(/check constraint/);
+    expect((await db.query("select * from public.word_reviews")).rows).toEqual([]);
+  });
+
+  it("hides one user's schedule and history from another, and keeps their words apart", async () => {
+    await as("authenticated", ALICE);
+    await record("sanction", 4, "2026-11-15T12:00:00Z");
+    await as("authenticated", BOB);
+    expect((await db.query("select * from public.word_reviews")).rows).toEqual([]);
+    expect((await db.query("select * from public.word_review_log")).rows).toEqual([]);
+    await record("sanction", 1, "2026-11-05T12:01:00Z");
+    expect((await db.query("select * from public.word_reviews")).rows).toHaveLength(1);
+    await as("authenticated", ALICE);
+    const { rows } = await db.query<{ due: Date }>("select due from public.word_reviews");
+    expect(rows[0].due.toISOString()).toBe("2026-11-15T12:00:00.000Z");
+  });
+
+  it("doesn't change another user's schedule, and stops saving as someone else", async () => {
+    await as("authenticated", ALICE);
+    await record("sanction", 4, "2026-11-15T12:00:00Z");
+    await as("authenticated", BOB);
+    expect((await db.query("update public.word_reviews set due = now()")).affectedRows).toBe(0);
+    await expect(
+      db.query("insert into public.word_review_log (user_id, word_key, rating, reviewed_at, next_due) values ($1, 'x', 1, now(), now())", [ALICE]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it("never lets history be changed or deleted", async () => {
+    await as("authenticated", ALICE);
+    await record("sanction", 4, "2026-11-15T12:00:00Z");
+    await expect(db.query("update public.word_review_log set rating = 1")).rejects.toThrow(/permission denied/);
+    await expect(db.query("delete from public.word_review_log")).rejects.toThrow(/permission denied/);
+    await expect(db.query("delete from public.word_reviews")).rejects.toThrow(/permission denied/);
+  });
+
+  it("blocks signed-out access", async () => {
+    await as("anon", null);
+    await expect(db.query("select * from public.word_reviews")).rejects.toThrow(/permission denied/);
+    await expect(db.query("select * from public.word_review_log")).rejects.toThrow(/permission denied/);
+    await expect(record("sanction", 4, "2026-11-15T12:00:00Z")).rejects.toThrow(/permission denied/);
+  });
 });
 
 describe("saves sent from the phone", () => {
