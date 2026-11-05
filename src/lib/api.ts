@@ -3,6 +3,10 @@ import type { AiContent, Definitions, LookupResult, Pronunciation } from "./defi
 
 export type Book = { id: string; title: string; author: string };
 export type DefinitionStatus = "found" | "not_found";
+export type SyncState = "sending" | "waiting";
+export type NewEntry = { id: string; createdAt: string };
+
+const ALREADY_EXISTS = "23505";
 export type SavedWord = {
   id: string;
   word: string;
@@ -16,9 +20,17 @@ export type SavedWord = {
   kept_as_typed?: boolean;
   ai_content?: AiContent | null;
   pronunciation?: Pronunciation | null;
+  // Only on the phone, while the server doesn't have this entry yet.
+  sync?: SyncState;
 };
 
-export type SavedQuote = { id: string; body: string; created_at: string; book: { title: string; author: string } | null };
+export type SavedQuote = {
+  id: string;
+  body: string;
+  created_at: string;
+  book: { title: string; author: string } | null;
+  sync?: SyncState;
+};
 
 const WORD_FIELDS =
   "id, word, base_form, sentence, created_at, definitions, definition_status, spelling_suggestions, kept_as_typed, ai_content, pronunciation, book:books(title)";
@@ -75,12 +87,18 @@ export async function listWords(): Promise<SavedWord[]> {
   return data as unknown as SavedWord[];
 }
 
-export async function addWord(word: string, bookId: string | null, sentence: string | null): Promise<SavedWord> {
+// If an earlier send got through but its reply was lost, the row already exists, so that one is returned.
+export async function addWord(word: string, bookId: string | null, sentence: string | null, entry: NewEntry): Promise<SavedWord> {
   const { data, error } = await client()
     .from("words")
-    .insert({ word, book_id: bookId, sentence })
+    .insert({ id: entry.id, word, book_id: bookId, sentence, created_at: entry.createdAt })
     .select(WORD_FIELDS)
     .single();
+  if (error?.code === ALREADY_EXISTS) {
+    const existing = await client().from("words").select(WORD_FIELDS).eq("id", entry.id).single();
+    if (existing.error) throw existing.error;
+    return existing.data as unknown as SavedWord;
+  }
   if (error) throw error;
   return data as unknown as SavedWord;
 }
@@ -155,12 +173,17 @@ export async function listQuotes(): Promise<SavedQuote[]> {
   return data as unknown as SavedQuote[];
 }
 
-export async function addQuote(body: string, bookId: string | null): Promise<SavedQuote> {
+export async function addQuote(body: string, bookId: string | null, entry: NewEntry): Promise<SavedQuote> {
   const { data, error } = await client()
     .from("quotes")
-    .insert({ body, book_id: bookId })
+    .insert({ id: entry.id, body, book_id: bookId, created_at: entry.createdAt })
     .select(QUOTE_FIELDS)
     .single();
+  if (error?.code === ALREADY_EXISTS) {
+    const existing = await client().from("quotes").select(QUOTE_FIELDS).eq("id", entry.id).single();
+    if (existing.error) throw existing.error;
+    return existing.data as unknown as SavedQuote;
+  }
   if (error) throw error;
   return data as unknown as SavedQuote;
 }

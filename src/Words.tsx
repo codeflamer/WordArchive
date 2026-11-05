@@ -14,13 +14,33 @@ import {
 } from "./lib/api";
 import { cacheWords, readCachedWords } from "./lib/cache";
 import { savedOn } from "./lib/dates";
-import { groupWords } from "./lib/groups";
+import { groupKey, groupWords } from "./lib/groups";
+import { addToOutbox, readOutbox, removeFromOutbox, type WordItem } from "./lib/outbox";
 import { checkWord } from "./lib/word";
 import { needsSpellingCheck, SpellingCheck } from "./SpellingCheck";
 import { WordPage } from "./WordPage";
 
+const toRow = (item: WordItem, sync: SavedWord["sync"]): SavedWord => ({
+  id: item.id,
+  word: item.word,
+  sentence: item.sentence,
+  created_at: item.createdAt,
+  book: item.bookTitle ? { title: item.bookTitle } : null,
+  definitions: null,
+  definition_status: null,
+  sync,
+});
+
+function startingWords(): SavedWord[] | null {
+  const waiting = readOutbox("word").map((item) => toRow(item, "waiting"));
+  const cached = readCachedWords();
+  if (!cached && waiting.length === 0) return null;
+  const ids = new Set(waiting.map((word) => word.id));
+  return [...waiting.reverse(), ...(cached ?? []).filter((word) => !ids.has(word.id))];
+}
+
 export function Words({ book }: { book: Book | null | undefined }) {
-  const [words, setWords] = useState<SavedWord[] | null>(readCachedWords);
+  const [words, setWords] = useState<SavedWord[] | null>(startingWords);
   const [openId, setOpenId] = useState<string | null>(null);
   const [failedLookups, setFailedLookups] = useState<ReadonlySet<string>>(new Set());
   const [aiTried, setAiTried] = useState<ReadonlySet<string>>(new Set());
@@ -28,35 +48,22 @@ export function Words({ book }: { book: Book | null | undefined }) {
   const [pronunciationTried, setPronunciationTried] = useState<ReadonlySet<string>>(new Set());
   const [draft, setDraft] = useState("");
   const [sentence, setSentence] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saved, setSaved] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const lookingUp = useRef(new Set<string>());
   const explaining = useRef(new Set<string>());
+  const sending = useRef(false);
+  const sendAgain = useRef(false);
+  const sentThisVisit = useRef(new Set<string>());
+  const latestWords = useRef(words);
+  latestWords.current = words;
 
   const groups = useMemo(() => groupWords(words ?? []), [words]);
   // Found by row, so the page stays open when a chosen spelling changes which group the word belongs to.
   const openGroup = groups.find((group) => group.rows.some((row) => row.id === openId));
   const openWord = openGroup?.word;
-
-  useEffect(() => {
-    let current = true;
-    listWords().then(
-      (list) => {
-        if (current) setWords(list);
-      },
-      () => {
-        if (!current) return;
-        if (readCachedWords()) setNotice("You're seeing your saved copy, because your words couldn't be refreshed.");
-        else setError("Your words didn't load. Check your connection and reopen the app.");
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (words) cacheWords(words);
@@ -150,6 +157,72 @@ export function Words({ book }: { book: Book | null | undefined }) {
     }
   }, [explain]);
 
+  // Sends waiting saves one at a time. The server only gets a word once, and definitions follow only after that.
+  const send = useCallback(async () => {
+    if (sending.current) {
+      sendAgain.current = true;
+      return;
+    }
+    sending.current = true;
+    try {
+      do {
+        sendAgain.current = false;
+        for (const item of readOutbox("word")) {
+          setWords((list) => (list ?? []).map((word) => (word.id === item.id ? { ...word, sync: "sending" } : word)));
+          try {
+            const stored = await addWord(item.word, item.bookId, item.sentence, { id: item.id, createdAt: item.createdAt });
+            removeFromOutbox(item.id);
+            sentThisVisit.current.add(stored.id);
+            const others = (latestWords.current ?? []).filter((word) => word.id !== item.id && !word.sync);
+            const source = groupWords(others).find(
+              (group) => group.key === groupKey(stored) || group.rows.some((row) => row.word === stored.word),
+            )?.word;
+            setWords((list) => (list ?? []).map((word) => (word.id === item.id ? stored : word)));
+            if (stored.definition_status !== null) continue;
+            if (source && source.definition_status !== null) void reuse(stored, source);
+            else void lookUp(stored);
+          } catch {
+            setWords((list) => (list ?? []).map((word) => (word.id === item.id ? { ...word, sync: "waiting" } : word)));
+          }
+        }
+      } while (sendAgain.current);
+    } finally {
+      sending.current = false;
+    }
+  }, [lookUp, reuse]);
+
+  useEffect(() => {
+    let current = true;
+    listWords().then(
+      (list) => {
+        if (!current) return;
+        const ids = new Set(list.map((word) => word.id));
+        // Keeps entries the server list may have been fetched too early to include.
+        setWords((previous) => [
+          ...(previous ?? []).filter((word) => !ids.has(word.id) && (word.sync || sentThisVisit.current.has(word.id))),
+          ...list,
+        ]);
+      },
+      () => {
+        if (!current) return;
+        if (readCachedWords() || readOutbox("word").length > 0) setNotice("You're seeing your saved copy, because your words couldn't be refreshed.");
+        else setError("Your words didn't load. Check your connection and reopen the app.");
+      },
+    );
+    void send();
+    const retry = () => void send();
+    const retryIfShown = () => {
+      if (document.visibilityState === "visible") void send();
+    };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", retryIfShown);
+    return () => {
+      current = false;
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", retryIfShown);
+    };
+  }, [send]);
+
   const keep = useCallback(async (entry: SavedWord) => {
     setFailedLookups((failed) => {
       const next = new Set(failed);
@@ -167,6 +240,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
   // Words saved before lookups or suggestions existed, or while a lookup failed, fill in when opened.
   const needsLookup =
     openWord !== undefined &&
+    !openWord.sync &&
     !failedLookups.has(openWord.id) &&
     (openWord.definition_status === null ||
       (openWord.definition_status === "not_found" && !openWord.kept_as_typed && openWord.spelling_suggestions == null));
@@ -183,7 +257,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
 
   // A repeat whose copy of the saved details failed picks them up when the word is next opened.
   const repeatsNeedingDetails = openGroup && openWord?.definition_status
-    ? openGroup.rows.filter((row) => row.definition_status === null && !failedLookups.has(row.id))
+    ? openGroup.rows.filter((row) => !row.sync && row.definition_status === null && !failedLookups.has(row.id))
     : [];
   const repeatIds = repeatsNeedingDetails.map((row) => row.id).join(" ");
   useEffect(() => {
@@ -219,7 +293,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
       .catch(() => {});
   }, [pronouncingId, pronouncingWord]);
 
-  async function save(event: FormEvent) {
+  function save(event: FormEvent) {
     event.preventDefault();
     const check = checkWord(draft);
     setSaved("");
@@ -232,28 +306,28 @@ export function Words({ book }: { book: Book | null | undefined }) {
       setError("Your current book hasn't loaded yet. Check your connection and try again.");
       return;
     }
-    setBusy(true);
     setError("");
-    try {
-      const existing = groups.find((group) => group.key === check.word || group.rows.some((row) => row.word === check.word));
-      const word = await addWord(check.word, book?.id ?? null, sentence.trim() || null);
-      setWords((list) => [word, ...(list ?? [])]);
-      setDraft("");
-      setSentence("");
-      if (existing && existing.word.definition_status !== null) {
-        setSaved(`Added to ${existing.key}`);
-        void reuse(word, existing.word);
-      } else {
-        setSaved(`Saved ${word.word}`);
-        void lookUp(word);
-      }
-    } catch {
-      setError("The word wasn't saved. Check your connection and try again.");
-    } finally {
-      setBusy(false);
-      input.current?.focus();
-    }
+    const existing = groups.find((group) => group.key === check.word || group.rows.some((row) => row.word === check.word));
+    // Kept on the phone first, so losing signal at any point can't lose the word.
+    const item: WordItem = {
+      kind: "word",
+      id: crypto.randomUUID(),
+      word: check.word,
+      bookId: book?.id ?? null,
+      bookTitle: book?.title ?? null,
+      sentence: sentence.trim() || null,
+      createdAt: new Date().toISOString(),
+    };
+    addToOutbox(item);
+    setWords((list) => [toRow(item, "sending"), ...(list ?? [])]);
+    setDraft("");
+    setSentence("");
+    setSaved(existing ? `Added to ${existing.key}` : `Saved ${item.word}`);
+    input.current?.focus();
+    void send();
   }
+
+  const waitingCount = words?.filter((word) => word.sync === "waiting").length ?? 0;
 
   return (
     <>
@@ -305,11 +379,17 @@ export function Words({ book }: { book: Book | null | undefined }) {
             value={sentence}
             onChange={(event) => setSentence(event.target.value)}
           />
-          <button className="primary" disabled={busy}>Save word</button>
+          <button className="primary">Save word</button>
           <p className="saved" role="status">{saved}</p>
         </form>
         {error && <p className="error" role="alert">{error}</p>}
         {notice && <p className="saved">{notice}</p>}
+        {waitingCount > 0 && (
+          <div className="sync-note">
+            <p>{waitingCount === 1 ? "1 word is waiting to sync. It's saved on this phone." : `${waitingCount} words are waiting to sync. They're saved on this phone.`}</p>
+            <button type="button" className="quiet" onClick={() => void send()}>Sync words now</button>
+          </div>
+        )}
 
         {words?.length === 0 && <p className="empty">Your words will appear here. Save the first one you meet in your book.</p>}
         {groups.length > 0 && (
@@ -321,6 +401,7 @@ export function Words({ book }: { book: Book | null | undefined }) {
                 </button>
                 <time dateTime={latest}>{savedOn.format(new Date(latest))}</time>
                 {typedForms.length > 0 && <span className="source">You typed {typedForms.join(", ")}</span>}
+                {rows.some((row) => row.sync === "waiting") && <span className="sync-flag">Waiting to sync</span>}
                 {entry.definition_status === "not_found" && (
                   <span className="word-flag">{entry.kept_as_typed ? "Not in the dictionary" : "Check this word"}</span>
                 )}

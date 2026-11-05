@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { Books } from "./Books";
 import { getCurrentBook, signOut, type Book } from "./lib/api";
+import { cacheBook, readCachedBook } from "./lib/cache";
 import { Quotes } from "./Quotes";
 import { Words } from "./Words";
 
 type Section = "words" | "quotes";
 
 export function Home() {
-  const [book, setBook] = useState<Book | null | undefined>(undefined);
+  const [book, setBook] = useState<Book | null | undefined>(readCachedBook);
   const [choosingBook, setChoosingBook] = useState(false);
   const [section, setSection] = useState<Section>("words");
   const [error, setError] = useState("");
@@ -16,12 +17,19 @@ export function Home() {
     let current = true;
     getCurrentBook().then(
       (found) => current && setBook(found),
-      () => current && setError("Your current book didn't load. Check your connection and reopen the app."),
+      () => {
+        // With a saved copy of the book, reading and saving carry on without signal.
+        if (current && readCachedBook() === undefined) setError("Your current book didn't load. Check your connection and reopen the app.");
+      },
     );
     return () => {
       current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (book !== undefined) cacheBook(book);
+  }, [book]);
 
   async function leave() {
     setError("");

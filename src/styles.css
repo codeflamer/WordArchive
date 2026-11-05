@@ -295,6 +295,24 @@ button:focus-visible {
   border-radius: 2px;
 }
 
+.sync-flag {
+  flex-basis: 100%;
+  margin: 0.25rem 0 0;
+  color: var(--ribbon);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.sync-note {
+  display: grid;
+  justify-items: start;
+  margin-top: 0.5rem;
+}
+
+.sync-note p {
+  margin: 0;
+}
+
 .word-reading {
   margin: 0;
 }

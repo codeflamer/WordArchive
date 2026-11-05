@@ -167,6 +167,9 @@ function Definitions({ word, lookupFailed, onRetry, onChoose, onKeep }: Pick<Wor
       </>
     );
   }
+  if (word.sync) {
+    return <p className="empty">The definition will appear once this word has synced.</p>;
+  }
   if (lookupFailed) {
     return (
       <div className="lookup-failed">

@@ -294,6 +294,237 @@ describe("AI meaning and examples", () => {
   });
 });
 
+describe("saving without signal", () => {
+  const OUTBOX = "wordarchive.outbox.v1";
+  const offline = new Error("offline");
+  const middlemarchCopy = JSON.stringify({ book: middlemarch });
+  const stored = (word: string, id: string) => ({ ...entry(word), id });
+
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockRejectedValue(offline);
+    mocked.listQuotes.mockRejectedValue(offline);
+    mocked.getCurrentBook.mockRejectedValue(offline);
+    mocked.addWord.mockRejectedValue(offline);
+    mocked.addQuote.mockRejectedValue(offline);
+    localStorage.setItem("wordarchive.book.v1", middlemarchCopy);
+  });
+
+  const waitingItems = () => JSON.parse(localStorage.getItem(OUTBOX) ?? "[]") as { id: string; word?: string; body?: string; kind: string }[];
+
+  async function saveOffline(user: ReturnType<typeof userEvent.setup>, word = "ephemeral", line?: string) {
+    await screen.findByText(/by George Eliot/);
+    await user.type(screen.getByLabelText("New word"), word);
+    if (line) await user.type(screen.getByLabelText("Sentence from the book (optional)"), line);
+    await user.click(screen.getByRole("button", { name: "Save word" }));
+    await screen.findByText("Waiting to sync");
+  }
+
+  it("keeps working from the saved book, with no error", async () => {
+    render(<App />);
+    expect(await screen.findByText(/by George Eliot/)).toBeVisible();
+    expect(screen.queryByText(/current book didn't load/)).not.toBeInTheDocument();
+  });
+
+  it("saves a word on the phone, clears the box, and marks it waiting", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await saveOffline(user, "ephemeral", "A line.");
+
+    expect(screen.getByRole("button", { name: "ephemeral" })).toBeVisible();
+    expect(screen.getByLabelText("New word")).toHaveValue("");
+    expect(screen.getByLabelText("Sentence from the book (optional)")).toHaveValue("");
+    expect(screen.getByText("1 word is waiting to sync. It's saved on this phone.")).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(waitingItems()).toMatchObject([{ kind: "word", word: "ephemeral", sentence: "A line.", bookId: "b1", bookTitle: "Middlemarch" }]);
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+  });
+
+  it("still shows a waiting word after the app is closed and reopened", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+    await saveOffline(user);
+    unmount();
+
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "ephemeral" })).toBeVisible();
+    expect(await screen.findByText("Waiting to sync")).toBeVisible();
+    expect(screen.getByLabelText("1 word saved")).toBeInTheDocument();
+    expect(waitingItems()).toHaveLength(1);
+  });
+
+  it("explains on the word's page that the definition is waiting", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await saveOffline(user);
+    await user.click(screen.getByRole("button", { name: "ephemeral" }));
+    expect(screen.getByText("The definition will appear once this word has synced.")).toBeVisible();
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+  });
+
+  it("sends the word when signal returns, then looks it up, with no duplicate", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await saveOffline(user);
+    const { id } = waitingItems()[0];
+    const firstEntry = mocked.addWord.mock.calls[0][3];
+
+    mocked.addWord.mockResolvedValue(stored("ephemeral", id));
+    mocked.defineWord.mockResolvedValue({ status: "found", definitions });
+    await act(async () => void window.dispatchEvent(new Event("online")));
+
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith(id, "found", definitions, null, null));
+    expect(mocked.addWord).toHaveBeenLastCalledWith("ephemeral", "b1", null, firstEntry);
+    expect(firstEntry.id).toBe(id);
+    expect(waitingItems()).toEqual([]);
+    expect(screen.queryByText("Waiting to sync")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "ephemeral" })).toHaveLength(1);
+  });
+
+  it("sends waiting words on reopening with signal", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+    await saveOffline(user);
+    const { id } = waitingItems()[0];
+    unmount();
+
+    mocked.listWords.mockResolvedValue([]);
+    mocked.addWord.mockResolvedValue(stored("ephemeral", id));
+    render(<App />);
+    await waitFor(() => expect(waitingItems()).toEqual([]));
+    expect(await screen.findByRole("button", { name: "ephemeral" })).toBeVisible();
+    await waitFor(() => expect(mocked.defineWord).toHaveBeenCalledWith("ephemeral"));
+  });
+
+  it("doesn't show a word twice if the server list already includes it", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+    await saveOffline(user);
+    const { id } = waitingItems()[0];
+    unmount();
+
+    mocked.listWords.mockResolvedValue([stored("ephemeral", id)]);
+    mocked.addWord.mockResolvedValue(stored("ephemeral", id));
+    render(<App />);
+    await waitFor(() => expect(waitingItems()).toEqual([]));
+    expect(screen.getAllByRole("button", { name: "ephemeral" })).toHaveLength(1);
+    expect(screen.getByLabelText("1 word saved")).toBeInTheDocument();
+  });
+
+  it("keeps a word just sent when an older server list arrives afterwards", async () => {
+    let finishList: (list: api.SavedWord[]) => void = () => {};
+    mocked.listWords.mockReturnValue(new Promise((resolve) => (finishList = resolve)));
+    mocked.addWord.mockImplementation(async (word, _book, _line, details) => stored(word, details.id));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText(/by George Eliot/);
+    await user.type(screen.getByLabelText("New word"), "ephemeral{Enter}");
+    await waitFor(() => expect(waitingItems()).toEqual([]));
+
+    await act(async () => finishList([]));
+    expect(screen.getByRole("button", { name: "ephemeral" })).toBeVisible();
+  });
+
+  it("retries with the button, and keeps waiting if it fails again", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await saveOffline(user);
+    await user.click(screen.getByRole("button", { name: "Sync words now" }));
+    await waitFor(() => expect(mocked.addWord).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Waiting to sync")).toBeVisible();
+    expect(waitingItems()).toHaveLength(1);
+  });
+
+  it("sends several in the order they were saved, and carries on past a failure", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await saveOffline(user, "first");
+    await user.type(screen.getByLabelText("New word"), "second{Enter}");
+    await screen.findByText("2 words are waiting to sync. They're saved on this phone.");
+    const [first, second] = waitingItems();
+
+    mocked.addWord.mockReset();
+    mocked.addWord.mockRejectedValueOnce(offline);
+    mocked.addWord.mockResolvedValueOnce(stored("second", second.id));
+    await user.click(screen.getByRole("button", { name: "Sync words now" }));
+
+    await waitFor(() => expect(waitingItems().map((item) => item.id)).toEqual([first.id]));
+    expect(mocked.addWord.mock.calls.map((call) => call[0])).toEqual(["first", "second"]);
+  });
+
+  it("merges an offline repeat straight away, and reuses saved details when it syncs", async () => {
+    const existing = { ...stored("sanction", "a"), definitions, definition_status: "found" as const, ai_content: aiContent, created_at: "2026-11-01T10:00:00Z" };
+    localStorage.setItem("wordarchive.words.v1", JSON.stringify([existing]));
+    const user = userEvent.setup();
+    render(<App />);
+    await saveOffline(user, "sanction");
+    expect(screen.getAllByRole("button", { name: "sanction" })).toHaveLength(1);
+    expect(screen.getByLabelText("1 word saved")).toBeInTheDocument();
+
+    const { id } = waitingItems()[0];
+    mocked.addWord.mockResolvedValue(stored("sanction", id));
+    await act(async () => void window.dispatchEvent(new Event("online")));
+    await waitFor(() => expect(mocked.saveDefinitions).toHaveBeenCalledWith(id, "found", definitions, null, null));
+    expect(mocked.defineWord).not.toHaveBeenCalled();
+  });
+
+  it("saves a quote on the phone, exactly as entered, and sends it later", async () => {
+    const quote = `  "Line," she said,\nexactly.  `;
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText(/by George Eliot/);
+    await user.click(screen.getByRole("button", { name: "Quotes" }));
+    screen.getByLabelText("New quote").focus();
+    await user.paste(quote);
+    await user.click(screen.getByRole("button", { name: "Save quote" }));
+
+    expect(await screen.findByText("1 quote is waiting to sync. It's saved on this phone.")).toBeVisible();
+    expect(document.querySelector(".quotes blockquote")?.textContent).toBe(quote);
+    expect(screen.getByLabelText("New quote")).toHaveValue("");
+    const { id, body } = waitingItems()[0];
+    expect(body).toBe(quote);
+
+    mocked.addQuote.mockResolvedValue({ id, body: quote, created_at: "2026-11-05T10:00:00Z", book: middlemarch });
+    await act(async () => void window.dispatchEvent(new Event("online")));
+    await waitFor(() => expect(waitingItems()).toEqual([]));
+    expect(mocked.addQuote.mock.lastCall?.slice(0, 2)).toEqual([quote, "b1"]);
+    expect(screen.queryByText("Waiting to sync")).not.toBeInTheDocument();
+  });
+
+  it("shows saved quotes and a waiting quote after reopening without signal", async () => {
+    localStorage.setItem("wordarchive.quotes.v1", JSON.stringify([savedQuote("An older line", middlemarch)]));
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Quotes" }));
+    await user.type(screen.getByLabelText("New quote"), "A new line");
+    await user.click(screen.getByRole("button", { name: "Save quote" }));
+    await screen.findByText("Waiting to sync");
+    unmount();
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Quotes" }));
+    expect(screen.getByText("A new line")).toBeVisible();
+    expect(screen.getByText("An older line")).toBeVisible();
+    expect(screen.getByLabelText("2 quotes saved")).toBeInTheDocument();
+  });
+
+  it("keeps unsent saves through a sign-out, but removes the saved copies", async () => {
+    let notify: (value: Awaited<ReturnType<typeof api.getSession>>) => void = () => {};
+    mocked.onSessionChange.mockImplementation((listener) => {
+      notify = listener;
+      return () => {};
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await saveOffline(user);
+    await act(async () => notify(null));
+    expect(await screen.findByLabelText("Password")).toBeVisible();
+    expect(screen.queryByText("ephemeral")).not.toBeInTheDocument();
+    await waitFor(() => expect(localStorage.getItem("wordarchive.book.v1")).toBeNull());
+    expect(waitingItems()).toHaveLength(1);
+  });
+});
+
 describe("repeated words", () => {
   const foundRow = (id: string, extra = {}) => ({
     ...entry("sanction"),
@@ -512,7 +743,7 @@ describe("when AI is unavailable", () => {
   it("still saves the word and its definitions, and flags it in the list", async () => {
     const user = userEvent.setup();
     await saveAndOpen(user);
-    expect(mocked.addWord).toHaveBeenCalledWith("sanction", null, null);
+    expect(mocked.addWord).toHaveBeenCalledWith("sanction", null, null, expect.anything());
     expect(mocked.saveDefinitions).toHaveBeenCalledWith("sanction", "found", withExamples, null, null);
     expect(mocked.saveAiContent).not.toHaveBeenCalled();
     expect(screen.getByText("Incomplete")).toBeVisible();
@@ -867,7 +1098,7 @@ describe("book sentences", () => {
     await user.type(screen.getByLabelText("Sentence from the book (optional)"), `  ${line}  `);
     await user.click(screen.getByRole("button", { name: "Save word" }));
 
-    expect(mocked.addWord).toHaveBeenCalledWith("sanction", null, line);
+    expect(mocked.addWord).toHaveBeenCalledWith("sanction", null, line, expect.anything());
     await user.click(await screen.findByRole("button", { name: "sanction" }));
     expect(screen.getByText(line)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Back to words" }));
@@ -881,7 +1112,7 @@ describe("book sentences", () => {
     await screen.findByText("No book chosen yet");
     await user.type(screen.getByLabelText("New word"), "ephemeral{Enter}");
 
-    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null);
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null, expect.anything());
     await user.click(await screen.findByRole("button", { name: "ephemeral" }));
     expect(screen.getByText("No book sentence saved with this word.")).toBeVisible();
   });
@@ -894,19 +1125,7 @@ describe("book sentences", () => {
     await user.type(screen.getByLabelText("New word"), "ephemeral");
     await user.type(screen.getByLabelText("Sentence from the book (optional)"), "   ");
     await user.click(screen.getByRole("button", { name: "Save word" }));
-    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null);
-  });
-
-  it("keeps the sentence when saving fails", async () => {
-    mocked.addWord.mockRejectedValue(new Error("offline"));
-    const user = userEvent.setup();
-    render(<App />);
-    await screen.findByText("No book chosen yet");
-    await user.type(screen.getByLabelText("New word"), "ephemeral");
-    await user.type(screen.getByLabelText("Sentence from the book (optional)"), "A line");
-    await user.click(screen.getByRole("button", { name: "Save word" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("The word wasn't saved");
-    expect(screen.getByLabelText("Sentence from the book (optional)")).toHaveValue("A line");
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null, expect.anything());
   });
 
   it("keeps half-typed text when opening a word and coming back", async () => {
@@ -944,7 +1163,7 @@ describe("saving quotes", () => {
     await user.paste(quote);
     await user.click(screen.getByRole("button", { name: "Save quote" }));
 
-    expect(mocked.addQuote).toHaveBeenCalledWith(quote, "b1");
+    expect(mocked.addQuote).toHaveBeenCalledWith(quote, "b1", expect.anything());
     expect(await screen.findByRole("status", { name: "" })).toBeInTheDocument();
     const saved = document.querySelector(".quotes blockquote");
     expect(saved?.textContent).toBe(quote);
@@ -968,17 +1187,6 @@ describe("saving quotes", () => {
     await user.click(screen.getByRole("button", { name: "Save quote" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Type or dictate a quote to save.");
     expect(mocked.addQuote).not.toHaveBeenCalled();
-  });
-
-  it("keeps the typed quote when saving fails", async () => {
-    mocked.addQuote.mockRejectedValue(new Error("offline"));
-    const user = userEvent.setup();
-    const box = await openQuotes(user);
-    await screen.findByText("No book chosen yet");
-    await user.type(box, "A line");
-    await user.click(screen.getByRole("button", { name: "Save quote" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("The quote wasn't saved");
-    expect(box).toHaveValue("A line");
   });
 
   it("keeps a half-typed quote when switching tabs or books", async () => {
@@ -1046,7 +1254,7 @@ describe("saving words", () => {
 
     await user.type(screen.getByLabelText("New word"), " Ephemeral. {Enter}");
 
-    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null);
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", null, null, expect.anything());
     expect(await screen.findByRole("status")).toHaveTextContent("Saved ephemeral");
     expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("ephemeral");
     expect(screen.getByLabelText("New word")).toHaveValue("");
@@ -1061,17 +1269,6 @@ describe("saving words", () => {
     await user.type(screen.getByLabelText("New word"), "two words{Enter}");
     expect(screen.getByRole("alert")).toHaveTextContent("Save one word at a time.");
     expect(mocked.addWord).not.toHaveBeenCalled();
-  });
-
-  it("keeps the typed word when saving fails", async () => {
-    mocked.listWords.mockResolvedValue([]);
-    mocked.addWord.mockRejectedValue(new Error("offline"));
-    const user = userEvent.setup();
-    render(<App />);
-    await screen.findByText("No book chosen yet");
-    await user.type(screen.getByLabelText("New word"), "ephemeral{Enter}");
-    expect(await screen.findByRole("alert")).toHaveTextContent("The word wasn't saved");
-    expect(screen.getByLabelText("New word")).toHaveValue("ephemeral");
   });
 
   it("signs out when asked", async () => {
@@ -1103,7 +1300,7 @@ describe("the current book", () => {
     render(<App />);
     await screen.findByText(/by George Eliot/);
     await user.type(screen.getByLabelText("New word"), "ephemeral{Enter}");
-    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", "b1", null);
+    expect(mocked.addWord).toHaveBeenCalledWith("ephemeral", "b1", null, expect.anything());
     const row = (await screen.findAllByRole("listitem"))[0];
     expect(within(row).getByText("Middlemarch")).toBeInTheDocument();
   });
@@ -1132,7 +1329,7 @@ describe("the current book", () => {
     expect(mocked.setCurrentBook).toHaveBeenCalledWith("b2");
     await screen.findByText(/by Toni Morrison/);
     await user.type(screen.getByLabelText("New word"), "sanction{Enter}");
-    expect(mocked.addWord).toHaveBeenCalledWith("sanction", "b2", null);
+    expect(mocked.addWord).toHaveBeenCalledWith("sanction", "b2", null, expect.anything());
   });
 
   it("adds a book and makes it current", async () => {

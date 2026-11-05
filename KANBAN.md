@@ -14,33 +14,6 @@ The effectiveness targets below are proposed and can be changed.
 
 ## To do
 
-### F11: Save without signal and sync later
-
-- **Depends on:** F03, F05
-- **Requirements:** Offline requirement in the PRD
-- **Story:** As the reader with no signal, I save words and quotes, and they sync and get looked up when I'm back online.
-- **Screen:** "Waiting to sync" marker on entries
-- **Server:** Sync to Supabase and lookup through Cloudflare on reconnect
-- **Data:** Offline storage holds entries until they sync
-
-**Before starting**
-
-- [ ] Try the keyboard mic in Airplane Mode on your iPhone, and record whether it works.
-
-**Test steps**
-
-- [ ] Turn on Airplane Mode.
-- [ ] Save a word and a quote, then force-close the app.
-- [ ] Reopen it and check they are listed as waiting.
-- [ ] Turn off Airplane Mode.
-- [ ] Check them on your laptop or after a fresh sign-in.
-
-**Passes if:** Nothing is lost, nothing is duplicated, and the word gets its definition after syncing.
-
-**Effectiveness check:** Entries sync within a minute of the app being open online.
-
-**Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
-
 ### F12: Review due words with spaced repetition
 
 - **Depends on:** F05
@@ -203,7 +176,34 @@ None yet.
 
 ## Testing
 
-None yet.
+### F11: Save without signal and sync later
+
+- **Depends on:** F03, F05
+- **Requirements:** Offline requirement in the PRD
+- **Story:** As the reader with no signal, I save words and quotes, and they sync and get looked up when I'm back online.
+- **Screen:** "Waiting to sync" marker on entries
+- **Server:** Sync to Supabase and lookup through Cloudflare on reconnect
+- **Data:** Browser storage on the phone holds entries until they sync. Each entry's ID is set when it's created, so a retry can't duplicate it.
+
+**Before starting**
+
+- [ ] Try the keyboard mic in Airplane Mode on your iPhone, and record whether it works.
+
+**Test steps**
+
+- [x] Turn on Airplane Mode.
+- [x] Save a word and a quote, then force-close the app.
+- [x] Reopen it and check they are listed as waiting.
+- [x] Turn off Airplane Mode.
+- [x] Check them after reopening the app.
+
+**Passes if:** Nothing is lost, nothing is duplicated, and the word gets its definition after syncing.
+
+**Effectiveness check:** Entries sync within a minute of the app being open online.
+
+**Build progress:** Live, with all 239 automated tests passing. In a browser against the fake local server, a word and a quote survived a reload with signal off, then synced once with no duplicates. Waiting for the effectiveness result and the keyboard mic check before moving to Done.
+
+**Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
 
 ## Done
 

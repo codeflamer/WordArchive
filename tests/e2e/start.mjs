@@ -9,6 +9,7 @@ const quotes = [];
 let currentBookId = null;
 let lookups = 0;
 let aiCalls = 0;
+let signal = true;
 const base64url = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
 
 function session() {
@@ -32,6 +33,12 @@ createServer((req, res) => {
       res.end(JSON.stringify(value));
     };
     const path = new URL(req.url, "http://localhost").pathname;
+    // Lets a browser check act out losing signal, and the loss lasts through reloads.
+    if (path === "/__signal") {
+      signal = new URL(req.url, "http://localhost").searchParams.get("on") !== "false";
+      return json(200, { signal });
+    }
+    if (!signal) return json(503, { message: "No signal" });
     if (path === "/auth/v1/token") return json(200, session());
     if (path === "/auth/v1/logout") return res.writeHead(204).end();
     if (path === "/api/pronounce") {
@@ -82,17 +89,20 @@ createServer((req, res) => {
     }
     if (path === "/rest/v1/words" && req.method === "GET") return json(200, words);
     if (path === "/rest/v1/words" && req.method === "POST") {
-      const { word: text, book_id, sentence } = JSON.parse(body);
+      const { id, word: text, book_id, sentence } = JSON.parse(body);
+      // Like the real database, sending the same ID twice is refused rather than duplicated.
+      if (words.some((item) => item.id === id)) return json(409, { code: "23505", message: "duplicate key" });
       const book = books.find((item) => item.id === book_id);
-      const word = { id: randomUUID(), word: text, sentence, definitions: null, definition_status: null, created_at: new Date().toISOString(), book: book ? { title: book.title } : null };
+      const word = { id: id ?? randomUUID(), word: text, sentence, definitions: null, definition_status: null, created_at: new Date().toISOString(), book: book ? { title: book.title } : null };
       words.unshift(word);
       return json(201, word);
     }
     if (path === "/rest/v1/quotes" && req.method === "GET") return json(200, quotes);
     if (path === "/rest/v1/quotes" && req.method === "POST") {
-      const { body: text, book_id } = JSON.parse(body);
+      const { id, body: text, book_id } = JSON.parse(body);
+      if (quotes.some((item) => item.id === id)) return json(409, { code: "23505", message: "duplicate key" });
       const book = books.find((item) => item.id === book_id);
-      const quote = { id: randomUUID(), body: text, created_at: new Date().toISOString(), book: book ? { title: book.title, author: book.author } : null };
+      const quote = { id: id ?? randomUUID(), body: text, created_at: new Date().toISOString(), book: book ? { title: book.title, author: book.author } : null };
       quotes.unshift(quote);
       return json(201, quote);
     }

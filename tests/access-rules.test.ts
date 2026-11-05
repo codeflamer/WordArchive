@@ -38,6 +38,27 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/009_word_pronunciation.sql", "utf8"));
 });
 
+describe("saves sent from the phone", () => {
+  const ID = "11111111-1111-4111-8111-111111111111";
+
+  it("accepts the phone's ID and time, and refuses the same ID twice", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.words (id, word, created_at) values ($1, 'offline', '2026-11-01T08:00:00Z')", [ID]);
+    const { rows } = await db.query<{ id: string; created_at: Date }>("select id, created_at from public.words");
+    expect(rows[0].id).toBe(ID);
+    expect(rows[0].created_at.toISOString()).toBe("2026-11-01T08:00:00.000Z");
+    await expect(db.query("insert into public.words (id, word) values ($1, 'offline')", [ID])).rejects.toMatchObject({ code: "23505" });
+    expect((await db.query("select * from public.words")).rows).toHaveLength(1);
+  });
+
+  it("does the same for quotes", async () => {
+    await as("authenticated", ALICE);
+    await db.query("insert into public.quotes (id, body) values ($1, 'A line')", [ID]);
+    await expect(db.query("insert into public.quotes (id, body) values ($1, 'A line')", [ID])).rejects.toMatchObject({ code: "23505" });
+    expect((await db.query("select * from public.quotes")).rows).toHaveLength(1);
+  });
+});
+
 describe("pronunciation", () => {
   const value = JSON.stringify({ audio: null, text: "/a/" });
 
