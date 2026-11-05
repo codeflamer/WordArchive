@@ -2,6 +2,7 @@ import type { Definitions } from "../src/lib/definitions";
 import { checkWord } from "../src/lib/word";
 import { lookUp } from "./define";
 import { explain } from "./explain";
+import { keepAwake } from "./keep-awake";
 import { lookUpPronunciation } from "./pronounce";
 
 // AI_DISABLED lets a real AI outage be tested without touching the stored key.
@@ -71,4 +72,5 @@ export async function handleRequest(request: Request, env: Env, fetcher: typeof 
 
 export default {
   fetch: (request: Request, env: Env) => handleRequest(request, env),
+  scheduled: (_controller: unknown, env: Env) => keepAwake(env, (url, init) => fetch(url, init)).then(() => undefined),
 };

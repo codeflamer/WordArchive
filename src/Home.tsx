@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Books } from "./Books";
-import { getCurrentBook, signOut, type Book } from "./lib/api";
+import { getCurrentBook, getLastChecked, signOut, type Book } from "./lib/api";
 import { cacheBook, readCachedBook } from "./lib/cache";
+import { savedOn } from "./lib/dates";
 import { Quotes } from "./Quotes";
 import { Review } from "./Review";
 import { Words } from "./Words";
@@ -13,9 +14,15 @@ export function Home() {
   const [choosingBook, setChoosingBook] = useState(false);
   const [section, setSection] = useState<Section>("words");
   const [error, setError] = useState("");
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
+    // Only a status line, so if it can't load it's simply left out.
+    getLastChecked().then(
+      (time) => current && setLastChecked(time),
+      () => {},
+    );
     getCurrentBook().then(
       (found) => current && setBook(found),
       () => {
@@ -96,6 +103,7 @@ export function Home() {
         {section === "review" && <Review />}
 
         <button className="quiet leave" onClick={leave}>Sign out</button>
+        {lastChecked && <p className="last-checked">Database last checked {savedOn.format(new Date(lastChecked))}</p>}
       </main>
     </>
   );

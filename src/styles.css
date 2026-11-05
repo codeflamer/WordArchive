@@ -295,6 +295,12 @@ button:focus-visible {
   border-radius: 2px;
 }
 
+.last-checked {
+  margin: 0.25rem 0 0;
+  color: var(--faded);
+  font-size: 0.9375rem;
+}
+
 .sync-flag {
   flex-basis: 100%;
   margin: 0.25rem 0 0;

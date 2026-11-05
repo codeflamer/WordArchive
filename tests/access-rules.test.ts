@@ -37,6 +37,7 @@ beforeEach(async () => {
   await db.exec(readFileSync("supabase/migrations/008_word_ai_content.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/009_word_pronunciation.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/010_word_reviews.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/011_keep_awake.sql", "utf8"));
 });
 
 describe("review schedule and history", () => {
@@ -98,6 +99,38 @@ describe("review schedule and history", () => {
     await expect(db.query("select * from public.word_reviews")).rejects.toThrow(/permission denied/);
     await expect(db.query("select * from public.word_review_log")).rejects.toThrow(/permission denied/);
     await expect(record("sanction", 4, "2026-11-15T12:00:00Z")).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("keeping the database awake", () => {
+  it("lets the public key record a run, and only ever keeps one row", async () => {
+    await as("anon", null);
+    await db.query("select public.record_keep_awake()");
+    await db.query("select public.record_keep_awake()");
+    await as("authenticated", ALICE);
+    const { rows } = await db.query("select last_run from public.keep_awake");
+    expect(rows).toHaveLength(1);
+  });
+
+  it("gives the public key no other access", async () => {
+    await as("anon", null);
+    await expect(db.query("select * from public.keep_awake")).rejects.toThrow(/permission denied/);
+    await expect(db.query("insert into public.keep_awake (id) values (true)")).rejects.toThrow(/permission denied/);
+    await expect(db.query("delete from public.keep_awake")).rejects.toThrow(/permission denied/);
+    await expect(db.query("select * from public.words")).rejects.toThrow(/permission denied/);
+  });
+
+  it("lets signed-in readers see the time, but not change it", async () => {
+    await as("anon", null);
+    await db.query("select public.record_keep_awake()");
+    await as("authenticated", BOB);
+    expect((await db.query("select * from public.keep_awake")).rows).toHaveLength(1);
+    await expect(db.query("update public.keep_awake set last_run = now()")).rejects.toThrow(/permission denied/);
+    await expect(db.query("select public.record_keep_awake()")).rejects.toThrow(/permission denied/);
+  });
+
+  it("can't add a second row", async () => {
+    await expect(db.query("insert into public.keep_awake (id) values (false)")).rejects.toThrow(/check constraint/);
   });
 });
 

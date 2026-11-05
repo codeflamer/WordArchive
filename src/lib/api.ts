@@ -162,6 +162,12 @@ export async function savePronunciation(wordId: string, pronunciation: Pronuncia
   if (error) throw error;
 }
 
+export async function getLastChecked(): Promise<string | null> {
+  const { data, error } = await client().from("keep_awake").select("last_run").maybeSingle();
+  if (error) throw error;
+  return (data as { last_run: string } | null)?.last_run ?? null;
+}
+
 export async function keepAsTyped(wordId: string): Promise<void> {
   const { error } = await client().from("words").update({ kept_as_typed: true }).eq("id", wordId);
   if (error) throw error;

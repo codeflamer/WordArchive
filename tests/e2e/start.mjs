@@ -40,6 +40,7 @@ const fake = createServer((req, res) => {
       return json(200, { signal });
     }
     if (!signal) return json(503, { message: "No signal" });
+    if (path === "/rest/v1/keep_awake") return json(200, [{ last_run: new Date().toISOString() }]);
     if (path === "/auth/v1/token") return json(200, session());
     if (path === "/auth/v1/logout") return res.writeHead(204).end();
     if (path === "/api/pronounce") {

@@ -26,6 +26,7 @@ vi.mock("../src/lib/api", () => ({
   saveAiContent: vi.fn(),
   pronounceWord: vi.fn(),
   savePronunciation: vi.fn(),
+  getLastChecked: vi.fn(),
   isOfflineError: vi.fn(),
   listReviews: vi.fn(),
   getReview: vi.fn(),
@@ -66,6 +67,7 @@ beforeEach(() => {
   mocked.saveAiContent.mockResolvedValue();
   mocked.pronounceWord.mockResolvedValue({ audio: null, text: null });
   mocked.savePronunciation.mockResolvedValue();
+  mocked.getLastChecked.mockResolvedValue(null);
   vi.mocked(playWord).mockResolvedValue("played");
   mocked.getCurrentBook.mockResolvedValue(null);
   mocked.listBooks.mockResolvedValue([]);
@@ -398,6 +400,32 @@ describe("AI meaning and examples", () => {
     await user.type(screen.getByLabelText("New word"), "zzzznotaword{Enter}");
     await screen.findByText("Check this word");
     expect(mocked.explainWord).not.toHaveBeenCalled();
+  });
+});
+
+describe("the database status line", () => {
+  beforeEach(() => {
+    mocked.getSession.mockResolvedValue(session);
+    mocked.listWords.mockResolvedValue([]);
+  });
+
+  it("shows when the database was last checked", async () => {
+    mocked.getLastChecked.mockResolvedValue("2026-11-05T12:00:00Z");
+    render(<App />);
+    expect(await screen.findByText(/Database last checked .*2026/)).toBeVisible();
+  });
+
+  it("leaves the line out when there's no run yet, or it can't load", async () => {
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    expect(screen.queryByText(/Database last checked/)).not.toBeInTheDocument();
+    cleanup();
+
+    mocked.getLastChecked.mockRejectedValue(new Error("offline"));
+    render(<App />);
+    await screen.findByText("No book chosen yet");
+    expect(screen.queryByText(/Database last checked/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 

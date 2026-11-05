@@ -121,18 +121,20 @@ The effectiveness targets below are proposed and can be changed.
 
 **Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
 
+## In progress
+
 ### F18: Keep the database awake and show its status
 
 - **Depends on:** F01
 - **Requirements:** Supabase pausing risk in the PRD
 - **Story:** As the reader, my app still works after a reading break of more than a week.
-- **Screen:** "Last checked" line in the app's settings
-- **Server:** Daily Cloudflare scheduled job
-- **Data:** The job writes its latest run to the database
+- **Screen:** "Last checked" line at the bottom of the app, as there's no settings screen
+- **Server:** Cloudflare scheduled job, running 4 times a day, as Supabase says a few requests a day is typically enough
+- **Data:** The job writes its latest run to the database through one narrow function
 
 **Test steps**
 
-- [ ] Claude deploys the daily job and confirms a run.
+- [ ] Claude deploys the job and confirms a run.
 - [ ] Check the "last checked" date in the app.
 - [ ] Leave the app unused for 8 or more days.
 - [ ] Open the app and save a word.
@@ -141,13 +143,15 @@ The effectiveness targets below are proposed and can be changed.
 
 **Effectiveness check:** No manual restores are needed during a month of use.
 
+**Build progress:** Built, with all 250 automated tests passing, and `011_keep_awake.sql` has run on the real database. Waiting for F12's iPhone test and push, so the deploy can include both.
+
 **Test record:** Date: — | Result: — | Effectiveness: — | Issues: —
 
-## In progress
+## Testing
 
 None yet.
 
-## Testing
+## Done
 
 ### F12: Review due words with spaced repetition
 
@@ -205,11 +209,9 @@ None yet.
 
 **Effectiveness check:** Entries sync within a minute of the app being open online.
 
-**Build progress:** Live, with all 239 automated tests passing. In a browser against the fake local server, a word and a quote survived a reload with signal off, then synced once with no duplicates. Waiting for the effectiveness result and the keyboard mic check before moving to Done.
+**Build progress:** Live, with all 239 automated tests passing. In a browser against the fake local server, a word and a quote survived a reload with signal off, then synced once with no duplicates. Whether the keyboard mic works in Airplane Mode wasn't recorded.
 
-**Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Not yet recorded | Issues: None
-
-## Done
+**Test record:** Date: 2026-11-05 | Result: Passed on iPhone | Effectiveness: Passed, synced in under a minute | Issues: None
 
 ### F10: Merge a repeated word into one entry
 
